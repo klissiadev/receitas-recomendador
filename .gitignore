@@ -1,0 +1,17 @@
+# Dados (não versionar)
+data/*.csv
+data/*.zip
+data/*.pkl
+data/*.npz
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# SO / IDE
+.DS_Store
+.vscode/
+.idea/

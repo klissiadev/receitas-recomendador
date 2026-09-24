@@ -1,10 +1,10 @@
 # Recomendador de Receitas com Filtragem Colaborativa
 
-**Equipe:** [Nome A] e [Nome B]
+**Equipe:** Ana Klissia Furtado Martins e Jéssica Rodrigues de Souza.
 
 ## 1. Objetivo
 
-Plataformas de culinária reúnem centenas de milhares de receitas, e o usuário tem dificuldade de encontrar as que combinam com seu gosto. Este trabalho constrói um sistema de recomendação de receitas baseado em **filtragem colaborativa**, usando o histórico de avaliações de usuários do Food.com.
+Plataformas de culinária reúnem centenas de milhares de receitas, e o usuário tem dificuldade de encontrar as que combinam com seu gosto. Este trabalho constrói um sistema de recomendação de receitas baseado em **filtragem colaborativa**, usando o histórico de avaliações de usuários do **Food.com**.
 
 **Objetivo geral:** desenvolver e avaliar um sistema que gere recomendações personalizadas de receitas, excluindo as que o usuário já avaliou.
 

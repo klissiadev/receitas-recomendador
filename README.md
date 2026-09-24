@@ -1,15 +1,15 @@
 # Recomendador de Receitas (Food.com)
 
-Sistema de recomendação por filtragem colaborativa para receitas, desenvolvido como trabalho da disciplina [nome da disciplina].
+Sistema de recomendação por filtragem colaborativa para receitas, desenvolvido como trabalho da disciplina de Oficina de Desenvolvimento de Sistemas I.
 
-**Equipe:** [Nome A] e [Nome B]
+**Equipe:** Ana Klissia Furtado Martins e Jéssica Rodrigues de Souza.
 
 ## Objetivo
 Recomendar receitas personalizadas a partir do histórico de avaliações dos usuários, excluindo as receitas já avaliadas, com interface para consultar histórico, ver recomendações e avaliar receitas.
 
 ## Estrutura
 ```
-data/        instruções para baixar os dados (CSVs não versionados)
+data/        instruções para baixar os dados
 notebooks/   01_eda, 02_modelos, 03_avaliacao
 src/         preprocess.py, models.py, evaluate.py
 app/         app.py (Streamlit)

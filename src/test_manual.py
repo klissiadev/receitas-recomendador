@@ -59,3 +59,6 @@ linha()
 onboarding = onboarding_recipes(recipes_df, pop_model, n=8)
 print("Receitas de onboarding sugeridas (variadas) para o usuário novo avaliar:")
 print(get_recipe_metadata(onboarding, recipes_df))
+
+
+

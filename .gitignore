@@ -4,6 +4,10 @@ data/*.zip
 data/*.pkl
 data/*.npz
 
+#modelos
+
+models/*.pkl
+
 # Python
 __pycache__/
 *.pyc

@@ -1,55 +1,137 @@
-"""
-Funções utilitárias usadas tanto pelos modelos quanto pela interface Streamlit.
-
-Contrato de dados esperado:
-
-interactions_df: colunas [user_id, recipe_id, date, rating, review]
-recipes_df:      colunas [id, name, minutes, tags, n_ingredients, ...]
-"""
+import ast
+import math
 
 import pandas as pd
 
-def get_user_history(user_id: int, interactions_df: pd.DataFrame,
-                      recipes_df: pd.DataFrame) -> pd.DataFrame:
-    """Retorna o histórico de avaliações de um usuário, já com o nome da receita, ordenado da mais recente 
-    para a mais antiga.
+NUTRITION_FIELDS = [
+    "calories_kcal", "fat_pdv", "sugar_pdv", "sodium_pdv",
+    "protein_pdv", "sat_fat_pdv", "carbs_pdv",
+]
 
-    Se o usuário não tiver nenhuma interação, retorna um DataFrame vazio com as colunas esperadas.
+
+def parse_list(value) -> list:
+    """Converte "['a', 'b']" em ['a', 'b']. Aceita listas já convertidas e NaN."""
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        return []
+    try:
+        parsed = ast.literal_eval(value)
+        return list(parsed) if isinstance(parsed, (list, tuple)) else []
+    except (ValueError, SyntaxError):
+        return []
+
+
+def parse_nutrition(value) -> dict:
+    vals = [float(v) for v in parse_list(value)][:len(NUTRITION_FIELDS)]
+    vals += [0.0] * (len(NUTRITION_FIELDS) - len(vals))
+    return dict(zip(NUTRITION_FIELDS, vals))
+
+
+def _clean(value, default=None):
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        return default
+    if hasattr(value, "item"):  # numpy -> tipo nativo (necessário p/ JSON)
+        return value.item()
+    return value
+
+
+def compute_rating_stats(interactions_df: pd.DataFrame) -> pd.DataFrame:
+    """avg_rating e n_ratings por receita. Calcule UMA vez na inicialização."""
+    stats = interactions_df.groupby("recipe_id")["rating"].agg(["mean", "count"])
+    stats = stats.rename(columns={"mean": "avg_rating", "count": "n_ratings"})
+    stats["avg_rating"] = stats["avg_rating"].round(2)
+    return stats
+
+
+def enrich_recipes(recipe_ids, recipes_df, rating_stats=None, detail=False) -> list[dict]:
+    """ids -> dicts completos, na mesma ordem dos ids.
+    detail=False -> RecipeSummary (+ description)
+    detail=True  -> RecipeDetail (steps, nutrition, ingredients, ...)
     """
+    ids = list(recipe_ids)
+    subset = (recipes_df[recipes_df["id"].isin(ids)]
+              .drop_duplicates(subset="id").set_index("id"))
+
+    records = []
+    for rid in ids:
+        if rid not in subset.index:
+            continue
+        r = subset.loc[rid]
+
+        avg, n = 0.0, 0
+        if rating_stats is not None and rid in rating_stats.index:
+            avg = float(rating_stats.at[rid, "avg_rating"])
+            n = int(rating_stats.at[rid, "n_ratings"])
+
+        rec = {
+            "id": int(rid),
+            "name": _clean(r.get("name"), ""),
+            "minutes": _clean(r.get("minutes"), 0),
+            "tags": parse_list(r.get("tags")),
+            "avg_rating": avg,
+            "n_ratings": n,
+            "description": _clean(r.get("description"), ""),
+        }
+        if detail:
+            steps = parse_list(r.get("steps"))
+            ingredients = parse_list(r.get("ingredients"))
+            rec.update({
+                "n_ingredients": _clean(r.get("n_ingredients"), len(ingredients)),
+                "ingredients": ingredients,
+                "n_steps": _clean(r.get("n_steps"), len(steps)),
+                "steps": steps,
+                "nutrition": parse_nutrition(r.get("nutrition")),
+                "contributor_id": _clean(r.get("contributor_id")),
+                "submitted": _clean(r.get("submitted")),
+                "user_rating": None,
+            })
+        records.append(rec)
+    return records
+
+
+def get_recipe_detail(recipe_id, recipes_df, interactions_df,
+                      rating_stats=None, user_id=None):
+    found = enrich_recipes([recipe_id], recipes_df, rating_stats, detail=True)
+    if not found:
+        return None
+    rec = found[0]
+    if user_id is not None:
+        own = interactions_df[(interactions_df["user_id"] == user_id)
+                              & (interactions_df["recipe_id"] == recipe_id)]
+        if not own.empty:
+            row = own.iloc[-1]
+            rec["user_rating"] = {"rating": int(row["rating"]), "date": str(row["date"])}
+    return rec
+
+
+def get_user_history(user_id, interactions_df, recipes_df, rating_stats=None) -> list[dict]:
+    """Formato HistoryItem: {recipe: RecipeSummary, rating, date}, mais recente primeiro."""
     historico = interactions_df[interactions_df["user_id"] == user_id]
-
-    colunas_vazias = ["recipe_id", "name", "rating", "date"]
     if historico.empty:
-        return pd.DataFrame(columns=colunas_vazias)
-
-    historico = historico.merge(
-        recipes_df[["id", "name", "minutes", "tags"]],
-        left_on="recipe_id", right_on="id", how="left"
-    )
+        return []
     historico = historico.sort_values("date", ascending=False)
-    return historico[["recipe_id", "name", "rating", "date", "minutes", "tags"]].reset_index(drop=True)
+    summaries = {r["id"]: r for r in enrich_recipes(
+        historico["recipe_id"].tolist(), recipes_df, rating_stats)}
+    return [
+        {"recipe": summaries[int(row["recipe_id"])],
+         "rating": int(row["rating"]), "date": str(row["date"])}
+        for _, row in historico.iterrows() if int(row["recipe_id"]) in summaries
+    ]
 
 
-def get_seen_recipe_ids(user_id: int, interactions_df: pd.DataFrame) -> set:
-    """Retorna o conjunto de recipe_id que o usuário já avaliou (já viu)."""
+def get_seen_recipe_ids(user_id, interactions_df) -> set:
     return set(interactions_df.loc[interactions_df["user_id"] == user_id, "recipe_id"])
 
 
-def filter_seen_items(candidate_ids, user_id: int, interactions_df: pd.DataFrame) -> list:
-    """Recebe uma lista de recipe_id candidatos e remove os que o usuário já avaliou."""
+def filter_seen_items(candidate_ids, user_id, interactions_df) -> list:
     vistos = get_seen_recipe_ids(user_id, interactions_df)
     return [rid for rid in candidate_ids if rid not in vistos]
 
 
-def get_recipe_metadata(recipe_ids, recipes_df: pd.DataFrame) -> pd.DataFrame:
-    """Retorna nome, tempo de preparo e tags para uma lista de recipe_id, na mesma ordem em que os ids foram passados."""
-    metadados = recipes_df[recipes_df["id"].isin(recipe_ids)].copy()
-    ordem = {rid: pos for pos, rid in enumerate(recipe_ids)}
-    metadados["_ordem"] = metadados["id"].map(ordem)
-    metadados = metadados.sort_values("_ordem").drop(columns="_ordem")
-    return metadados.reset_index(drop=True)
+def get_recipe_metadata(recipe_ids, recipes_df, rating_stats=None, detail=False) -> list[dict]:
+    return enrich_recipes(recipe_ids, recipes_df, rating_stats, detail=detail)
 
 
-def is_new_user(user_id: int, interactions_df: pd.DataFrame) -> bool:
-    """Indica se o usuário é 'novo', usado para decidir se entra no fluxo normal ou no fluxo de cold start."""
+def is_new_user(user_id, interactions_df) -> bool:
     return user_id not in interactions_df["user_id"].values

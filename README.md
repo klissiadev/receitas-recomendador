@@ -12,7 +12,6 @@ Recomendar receitas personalizadas a partir do histórico de avaliações dos us
 data/        instruções para baixar os dados
 notebooks/   01_eda, 02_modelos, 03_avaliacao
 src/         preprocess.py, models.py, evaluate.py
-app/         app.py (Streamlit)
 docs/        relatorio.md e link do vídeo
 ```
 
@@ -34,7 +33,8 @@ pip install -r requirements.txt
 # 4. Baixar os dados (ver data/README.md)
 
 # 5. Rodar a interface
-streamlit run app/app.py
+npm i
+npm run dev
 ```
 
 ## Documentação

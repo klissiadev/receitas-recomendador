@@ -1,0 +1,133 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Design system — "Recomendação de Receitas"
+ * Todas as cores vivem aqui como tokens semânticos.
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+
+  --font-serif: "Lora", Georgia, serif;
+  --font-sans: "Source Sans 3", system-ui, sans-serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* tokens do projeto */
+  --color-brand: var(--brand);
+  --color-navy: var(--navy);
+  --color-ink: var(--ink);
+  --color-soft: var(--soft);
+  --color-line: var(--line);
+  --color-star: var(--star);
+  --color-badge: var(--badge);
+  --color-tag: var(--tag);
+  --color-nutri: var(--nutri);
+  --color-success-bg: var(--success-bg);
+  --color-success-fg: var(--success-fg);
+  --color-info-bg: var(--info-bg);
+  --color-info-fg: var(--info-fg);
+  --color-warn-bg: var(--warn-bg);
+  --color-warn-fg: var(--warn-fg);
+  --color-error-bg: var(--error-bg);
+  --color-error-fg: var(--error-fg);
+}
+
+:root {
+  --radius: 0.75rem;
+
+  --brand: oklch(0.432 0.153 30.2); /* #9B301C */
+  --navy: oklch(0.297 0.093 265.3); /* #0F2B5B */
+  --ink: oklch(0.345 0.045 268.6); /* #28324A */
+  --soft: oklch(0.551 0.023 264.4); /* #6B7280 */
+  --line: oklch(0.917 0.029 96.8); /* #E5E0C8 */
+  --star: oklch(0.746 0.129 82.6); /* #D9A62E */
+  --badge: oklch(0.945 0.067 98.5); /* #F7EDC0 */
+  --tag: oklch(0.489 0.038 265.9); /* #5B6B85 */
+  --nutri: oklch(0.951 0 0); /* #EFEFEF */
+  --success-bg: oklch(0.936 0.049 138.5); /* #E1F3D8 */
+  --success-fg: oklch(0.489 0.106 145.4); /* #2F6A31 */
+  --info-bg: oklch(0.925 0.016 261.9); /* #E7ECF3 */
+  --info-fg: oklch(0.481 0.069 254.9); /* #3D5A80 */
+  --warn-bg: oklch(0.953 0.045 89.9); /* #FBEFD1 */
+  --warn-fg: oklch(0.432 0.153 30.2);
+  --error-bg: oklch(0.925 0.032 24.9); /* #FBE1DE */
+  --error-fg: oklch(0.473 0.132 32.3); /* #A6402E */
+
+  --background: oklch(0.985 0.012 95);
+  --foreground: var(--ink);
+  --card: oklch(0.995 0.004 95);
+  --card-foreground: var(--ink);
+  --popover: oklch(0.995 0.004 95);
+  --popover-foreground: var(--ink);
+  --primary: var(--brand);
+  --primary-foreground: oklch(0.985 0.012 95);
+  --secondary: var(--navy);
+  --secondary-foreground: oklch(0.985 0.012 95);
+  --muted: oklch(0.96 0.01 95);
+  --muted-foreground: var(--soft);
+  --accent: var(--badge);
+  --accent-foreground: var(--ink);
+  --destructive: var(--error-fg);
+  --destructive-foreground: oklch(0.99 0 0);
+  --border: var(--line);
+  --input: var(--line);
+  --ring: var(--navy);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-serif);
+  }
+}
+
+@utility app-backdrop {
+  background-size: 420px auto;
+  background-repeat: repeat;
+  background-attachment: fixed;
+}
+
+@utility scroll-soft {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line) transparent;
+}

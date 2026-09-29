@@ -1,7 +1,7 @@
 import pandas as pd
 from surprise import Dataset, Reader, SVD, accuracy, dump
 from surprise.model_selection import train_test_split, cross_validate
-
+from pathlib import Path
 
 def build_dataset(user_df: pd.DataFrame, rating_scale: tuple[int, int] = (0, 5)) -> Dataset:
     reader = Reader(rating_scale=rating_scale)
@@ -38,7 +38,10 @@ def train_svd(
 
 
 def save_model(algo: SVD, path: str = 'svd.pkl') -> None:
-    dump.dump(path, algo=algo)
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    dump.dump(str(path), algo=algo)
     print(f"\nModel saved to {path}")
 
 

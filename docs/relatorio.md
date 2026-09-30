@@ -1,97 +1,138 @@
-# Recomendador de Receitas com Filtragem Colaborativa
+# Relatório do Projeto: Sistema de Recomendação de Receitas por Filtragem Colaborativa
 
 **Equipe:** Ana Klissia Furtado Martins e Jéssica Rodrigues de Souza.
 
-## 1. Objetivo
+\---
 
-Plataformas de culinária reúnem centenas de milhares de receitas, e o usuário tem dificuldade de encontrar as que combinam com seu gosto. Este trabalho constrói um sistema de recomendação de receitas baseado em **filtragem colaborativa**, usando o histórico de avaliações de usuários do **Food.com**.
+## 1\. Objetivo
 
-**Objetivo geral:** desenvolver e avaliar um sistema que gere recomendações personalizadas de receitas, excluindo as que o usuário já avaliou.
+Plataformas de culinária reúnem centenas de milhares de receitas, o que frequentemente gera sobrecarga de informação para os usuários ao tentarem encontrar opções alinhadas às suas preferências. Este trabalho constrói e avalia um sistema de recomendação de receitas personalizado utilizando algoritmos de **filtragem colaborativa** com base no histórico de interações do portal **Food.com**.
 
-**Objetivos específicos:**
+**Objetivo Geral:** Desenvolver e avaliar um sistema interativo que gere recomendações personalizadas de receitas culinárias para usuários cadastrados, excluindo itens já avaliados por eles.
 
-- Preparar a base de interações usuário–receita (limpeza, filtros e divisão treino/teste).
-- Implementar e comparar três abordagens: baseline por popularidade, filtragem colaborativa item-based (KNN) e fatoração de matrizes (SVD).
-- Tratar o caso de usuário sem histórico (*cold start*).
-- Disponibilizar uma interface para consultar históricos, ver recomendações e avaliar receitas.
-- Avaliar os resultados com métricas de ranking e com usuários de teste.
+**Objetivos Específicos:**
 
-## 2. Fundamentação teórica
+* Processar e estruturar as bases de dados brutas de interações e receitas do Food.com.
+* Implementar e comparar modelos de recomendação: baseline por popularidade (Média Bayesiana), filtragem colaborativa baseada em itens (kNN) e fatoração de matrizes por decomposição em valores singulares (SVD).
+* Tratar o problema do início a frio (*cold start*) para novos usuários sem histórico de interações.
+* Disponibilizar uma interface funcional para navegação, consulta de histórico, obtenção de recomendações e inserção de avaliações.
+* Avaliar o desempenho dos modelos por meio de métricas de acurácia de ranking, cobertura de catálogo e testes de usabilidade com usuários.
 
-### 2.1 Sistemas de recomendação
+\---
 
-Sistemas de recomendação sugerem itens que provavelmente interessarão a um usuário, reduzindo a sobrecarga de informação. As abordagens mais comuns são a **filtragem baseada em conteúdo**, que recomenda itens parecidos com os que o usuário já gostou usando atributos dos itens (ingredientes, tags), e a **filtragem colaborativa**, que usa apenas o comportamento de muitos usuários. Existem também sistemas **híbridos**, que combinam as duas. Este trabalho foca na filtragem colaborativa.
+## 2\. Fundamentação Teórica
 
-### 2.2 Filtragem colaborativa
+### 2.1 Sistemas de Recomendação e Filtragem Colaborativa
 
-A ideia central é que usuários com gostos parecidos no passado tendem a ter gostos parecidos no futuro. Os dados de entrada são a **matriz usuário–item**, em que cada célula guarda a nota que o usuário deu ao item. Essa matriz é extremamente esparsa, pois cada usuário avalia uma fração mínima do catálogo. Há duas famílias de métodos: os baseados em vizinhança (*memory-based*) e os baseados em modelo (*model-based*).
+Sistemas de Recomendação (SRs) estimam a utilidade $\\hat{R}(u,i)$ de um item $i$ para um usuário $u$ a partir de dados de **usuários**, **itens** e **interações** (feedback explícito ou implícito).
 
-**User-based.** Recomenda ao usuário u os itens bem avaliados por usuários similares a ele. A similaridade entre usuários é calculada sobre os itens que ambos avaliaram. O custo cresce com o número de usuários, e o perfil de um usuário muda com frequência, o que dificulta manter as similaridades atualizadas.
+A **Filtragem Colaborativa (FC)** utiliza exclusivamente o histórico comportamental coletivo contido na matriz usuário-item $R \\in \\mathbb{R}^{M \\times N}$, cujas entradas $R\_{u,i}$ indicam a avaliação atribuída por $u$ a $i$. Devido à alta esparsidade dessa matriz, dividem-se as abordagens em:
 
-**Item-based.** Calcula a similaridade entre itens a partir das avaliações que receberam. Um item é recomendado se for similar aos que o usuário já avaliou bem (“quem gostou de X também gostou de Y”). Em geral escala melhor que o user-based quando há mais usuários que itens relevantes, e é mais fácil de explicar ao usuário (Sarwar et al., 2001). Este é o modelo principal do projeto.
+* **Métodos baseados em memória (vizinhança):** calculam similaridades diretas entre usuários (*User-Based*) ou itens (*Item-Based*).
+* **Métodos baseados em modelo:** utilizam técnicas de redução de dimensionalidade e aprendizado para prever preferências.
 
-A similaridade mais usada é a do **cosseno** entre os vetores de dois itens *i* e *j*:
+### 2.2 Filtragem Colaborativa Baseada em Itens (Item-Based kNN)
 
-```
-sim(i, j) = (r_i · r_j) / (||r_i|| × ||r_j||)
-```
+A FC *Item-Based* explora a maior estabilidade temporal das relações entre itens em comparação às preferências dos usuários. A similaridade entre os itens $i$ e $j$ é calculada pela **Similaridade do Cosseno**:
 
-onde *r_i* é o vetor de avaliações do item *i* sobre todos os usuários. A pontuação de um item candidato *j* para o usuário *u* pode ser calculada como a soma das similaridades entre *j* e os itens que *u* avaliou, ponderada pelas notas de *u*.
+$$\\text{sim}(i, j) = \\frac{\\sum\_{u \\in U} R\_{u,i} , R\_{u,j}}{\\sqrt{\\sum\_{u \\in U} R\_{u,i}^2} \\sqrt{\\sum\_{u \\in U} R\_{u,j}^2}}$$
 
-### 2.3 Fatoração de matrizes (SVD)
+A nota prevista para o item candidato $j$ é obtida pela média das avaliações prévias do usuário $u$ nos $k$-vizinhos mais próximos ($k\\text{NN}$) ponderada pelas similaridades:
 
-Métodos baseados em modelo aprendem representações compactas de usuários e itens. Na fatoração de matrizes, a matriz usuário–item *R* é aproximada por dois fatores de baixa dimensão:
+$$\\hat{R}*{u,j} = \\frac{\\sum*{i \\in N\_k(j)} \\text{sim}(i,j) \\cdot R\_{u,i}}{\\sum\_{i \\in N\_k(j)} |\\text{sim}(i,j)|}$$
 
-```
-R ≈ P · Qᵀ
-```
+### 2.3 Fatoração de Matrizes (SVD)
 
-em que cada usuário e cada item é representado por um vetor de *k* **fatores latentes** (por exemplo, tendência a receitas doces, rápidas ou elaboradas), e a afinidade é o produto interno dos dois vetores. Variantes populares, como o SVD popularizado no Netflix Prize, incluem vieses de usuário e de item e regularização (Koren, Bell e Volinsky, 2009). Neste trabalho, o SVD é usado como comparação com o método de vizinhança.
+A fatoração de matrizes projeta usuários e itens em um espaço latente $k \\ll \\min(M, N)$, decompondo $R \\approx P \\cdot Q^T$. Incorporando vieses globais ($\\mu$), de usuário ($b\_u$) e de item ($b\_i$), a predição é expressa por:
 
-### 2.4 Cold start
+$$\\hat{R}\_{u,i} = \\mu + b\_u + b\_i + p\_u \\cdot q\_i^T$$
 
-O *cold start* ocorre quando não há dados suficientes para recomendar: **usuário novo**, sem histórico, ou **item novo**, sem avaliações. A filtragem colaborativa pura não funciona nesses casos, pois depende das interações. Neste trabalho, o usuário novo recebe inicialmente as receitas mais populares e bem avaliadas, com filtro opcional por tag (por exemplo, vegetariano ou sobremesa). Em seguida, ele avalia de 5 a 10 receitas de *onboarding*, o que gera histórico mínimo para o modelo colaborativo passar a personalizar as sugestões.
+A otimização minimiza o erro quadrático com regularização $\\lambda$:
 
-### 2.5 Baseline por popularidade
+$$\\min\_{P, Q, b} \\sum\_{(u,i) \\in R\_{\\text{treino}}} \\left( R\_{u,i} - (\\mu + b\_u + b\_i + p\_u \\cdot q\_i^T) \\right)^2 + \\lambda \\left( |p\_u|\_2^2 + |q\_i|\_2^2 + b\_u^2 + b\_i^2 \\right)$$
 
-Recomenda as receitas mais bem avaliadas globalmente. Para evitar que itens com poucas notas dominem o ranking, usa-se a **média bayesiana** (média ponderada):
+### 2.4 Cold Start e Média Bayesiana
 
-```
-score(i) = ( v / (v + m) ) × R_i + ( m / (v + m) ) × C
-```
+O problema do **início a frio** (*cold start*) ocorre pela falta de histórico para novos usuários ou itens. Para novos usuários, adota-se uma abordagem em duas etapas:
 
-onde *v* é o número de avaliações do item, *R_i* sua nota média, *C* a nota média global e *m* um limiar mínimo de avaliações. Serve como referência de comparação e como solução de cold start.
+1. **Recomendação por Popularidade:** Exibição inicial de itens bem avaliados (com suporte a filtros por tags).
+2. **Onboarding:** Coleta de 5 a 10 avaliações iniciais para inicializar a filtragem colaborativa.
 
-### 2.6 Métricas de avaliação
+Para mitigar distorções de itens com poucas avaliações no ranking por popularidade, utiliza-se a **Média Bayesiana**:
 
-Como o objetivo é gerar uma lista de *K* recomendações, usam-se métricas de ranking. Uma receita é considerada **relevante** quando o usuário lhe deu nota ≥ 4 no conjunto de teste.
+$$\\text{score}(i) = \\left( \\frac{v}{v + m} \\right) \\cdot R\_i + \\left( \\frac{m}{v + m} \\right) \\cdot C$$
 
-- **Precision@K:** proporção de itens relevantes entre os K recomendados.
-- **Recall@K:** proporção dos itens relevantes do usuário que aparecem entre os K recomendados.
-- **NDCG@K:** considera a posição dos itens relevantes, valorizando acertos no topo da lista.
-- **MAP@K:** média, entre os usuários, da precisão média nas posições em que há acerto.
-- **Cobertura do catálogo:** fração das receitas que o sistema chega a recomendar, indicando diversidade e viés de popularidade.
-- **RMSE/MAE:** erro na previsão das notas, quando o modelo prevê valores.
+onde $v$ é o número de avaliações do item $i$, $R\_i$ sua nota média simples, $C$ a média global e $m$ a constante de suavização.
 
-### 2.7 Referências
+### 2.5 Métricas de Avaliação
 
-- RESNICK, P. et al. GroupLens: an open architecture for collaborative filtering of netnews. *CSCW*, 1994.
-- SARWAR, B. et al. Item-based collaborative filtering recommendation algorithms. *WWW*, 2001.
-- KOREN, Y.; BELL, R.; VOLINSKY, C. Matrix factorization techniques for recommender systems. *IEEE Computer*, 42(8), 2009.
-- RICCI, F.; ROKACH, L.; SHAPIRA, B. (eds.). *Recommender Systems Handbook*. Springer.
-- MAJUMDER, B. P. et al. Generating personalized recipe from historical user preferences. *EMNLP-IJCNLP*, 2019 (origem do dataset Food.com).
+O desempenho dos modelos é avaliado por três dimensões:
 
-## 3. Dados
-*(a preencher)*
+* **Acurácia de Predição:** MAE ($\\frac{1}{|T|} \\sum |R\_{u,i} - \\hat{R}*{u,i}|$) e RMSE ($\\sqrt{\\frac{1}{|T|} \\sum (R*{u,i} - \\hat{R}\_{u,i})^2}$).
+* **Ranking Top-$K$:** Precision@K, Recall@K, MAP@K e NDCG@K.
+* **Diversidade:** Cobertura do Catálogo (proporção de itens do acervo recomendados a pelo menos um usuário).
 
-## 4. Método
-*(a preencher)*
+\---
 
-## 5. Resultados
-*(a preencher)*
+## 3\. Dados
 
-## 6. Limitações
-*(a preencher)*
+O projeto utiliza o dataset público do **Food.com** (Majumder et al., 2019), composto por dois arquivos CSV brutos (\~644 MB no total).
 
-## 7. Conclusão
-*(a preencher)*
+### 3.1 Detalhamento dos Arquivos do Dataset
+
+#### 1\. `RAW\_interactions.csv` (Tamanho: \~349,44 MB)
+
+Armazena o histórico de interações e avaliações dos usuários.
+
+|Coluna|Tipo de Dado|Descrição e Papel no Sistema|
+|-|-|-|
+|`user\_id`|Inteiro / ID|Identificador único do usuário.|
+|`recipe\_id`|Inteiro / ID|Identificador único da receita.|
+|`date`|Data (`YYYY-MM-DD`)|Data do registro da interação.|
+|`rating`|Inteiro (Escala 0–5)|Nota atribuída pelo usuário (**feedback explícito** utilizado na matriz $R$).|
+|`review`|Texto (*String*)|Comentário/crítica textual sobre a receita.|
+
+#### 2\. `RAW\_recipes.csv` (Tamanho: \~294,52 MB)
+
+Contém os metadados e detalhes de preparo de cada receita.
+
+|Coluna|Tipo de Dado|Descrição e Papel no Sistema|
+|-|-|-|
+|`name`|Texto (*String*)|Nome da receita.|
+|`id`|Inteiro / ID|Identificador único da receita (chave de ligação com `recipe\_id`).|
+|`minutes`|Inteiro|Tempo estimado de preparo (em minutos).|
+|`contributor\_id`|Inteiro / ID|Identificador do usuário autor da receita.|
+|`submitted`|Data (`YYYY-MM-DD`)|Data de publicação da receita.|
+|`tags`|Lista de *Strings*|Categorias e tags (utilizadas nos filtros de *cold start*).|
+|`nutrition`|Lista numérica|Informações nutricionais em % do valor diário (PDV).|
+|`n\_steps`|Inteiro|Número de passos do modo de preparo.|
+|`steps`|Lista de *Strings*|Instruções detalhadas de preparo.|
+|`description`|Texto (*String*)|Descrição geral da receita.|
+
+\---
+
+## 4\. Método
+
+*(A preencher)*
+
+## 5\. Resultados
+
+*(A preencher)*
+
+## 6\. Limitações
+
+*(A preencher)*
+
+## 7\. Conclusão
+
+*(A preencher)*
+
+\---
+
+### Referências Bibliográficas
+
+* KOREN, Y.; BELL, R.; VOLINSKY, C. Matrix factorization techniques for recommender systems. *IEEE Computer*, v. 42, n. 8, p. 30-37, 2009.
+* MAJUMDER, B. P. et al. Generating personalized recipe from historical user preferences. In: *Proceedings of the 2019 Conference on Empirical Methods in Natural Language Processing (EMNLP-IJCNLP)*, 2019.
+* RICCI, F.; ROKACH, L.; SHAPIRA, B.; KANTOR, P. B. (Eds.). *Recommender Systems Handbook*. New York: Springer, 2011.
+* SARWAR, B. et al. Item-based collaborative filtering recommendation algorithms. In: *Proceedings of the 10th international conference on World Wide Web (WWW)*, 2001. p. 285-295.
+

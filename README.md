@@ -10,9 +10,10 @@ Recomendar receitas personalizadas a partir do histórico de avaliações dos us
 ## Estrutura
 ```
 data/        instruções para baixar os dados
-notebooks/   01_eda, 02_modelos, 03_avaliacao
-src/         preprocess.py, models.py, evaluate.py
 docs/        relatorio.md e link do vídeo
+frontend/    interface do sistema
+notebooks/   01_eda, 02_modelos, 03_avaliacao
+src/         preprocess.py, models.py, main.py
 ```
 
 ## Como executar
@@ -32,7 +33,11 @@ pip install -r requirements.txt
 
 # 4. Baixar os dados (ver data/README.md)
 
-# 5. Rodar a interface
+# 5. Rodar a API
+uvicorn main:app --reload --port 8000
+
+# 6. Rodar a interface
+cd frontend
 npm i
 npm run dev
 ```

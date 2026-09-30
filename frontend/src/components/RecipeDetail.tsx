@@ -99,7 +99,7 @@ export function RecipeDetailView({
                 </span>
               </span>
             </div>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex max-h-21 flex-wrap gap-2 overflow-y-auto pr-1">
               {recipe.tags.map((t) => (
                 <Tag key={t}>{t}</Tag>
               ))}
@@ -148,11 +148,11 @@ export function RecipeDetailView({
                 Você já avaliou esta receita: nota {recipe.user_rating.rating}
               </Banner>
             ) : (
-              <div className="space-y-3">
+              <div className="flex flex-col items-start gap-4">
                 <p className="text-sm font-medium text-ink">Sua avaliação</p>
                 <Stars value={rating} size={28} onChange={(v) => { setRating(v); setHint(false); }} />
                 {hint && <Banner variant="warn">Escolha uma nota antes de enviar.</Banner>}
-                <PrimaryButton onClick={submit} disabled={sending}>
+                <PrimaryButton onClick={submit} disabled={sending} className="mt-2">
                   {sending ? "Enviando…" : "Enviar avaliação"}
                 </PrimaryButton>
               </div>

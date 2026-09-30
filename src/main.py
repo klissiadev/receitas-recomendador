@@ -17,6 +17,7 @@ import os
 import sqlite3
 from contextlib import asynccontextmanager
 from datetime import date
+import numpy as np
 
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
@@ -40,7 +41,7 @@ SVD_PATH = os.getenv("SVD_PATH", os.path.join(BASE_DIR, "svd.pkl"))
 CONTENT_PATH = os.getenv("CONTENT_PATH", os.path.join(BASE_DIR, "content_similarity_artifacts.pkl"))
 DB_PATH = os.getenv("DB_PATH", os.path.join(BASE_DIR, "app.db"))
 
-SVD_POOL = 2000     # candidatos avaliados pelo SVD (o dataset inteiro seria lento)
+SVD_POOL = 2000     
 KNN_SEEDS = 3       # quantas receitas curtidas servem de base para o "knn"
 LIKED_MIN = 4       # nota minima para considerar que o usuario gostou
 
@@ -155,11 +156,40 @@ def rank_ids(model: str, user_id: int, tags: list[str], k: int) -> list:
 
     has_history = svd.has_history(user_id)
 
+    # if model == "svd" and has_history:
+    #     pool = _first_valid(svd.popular_recipe_ids, ok, SVD_POOL)
+    #     scored = sorted(((rid, svd.algo.predict(user_id, rid, clip=False).est) for rid in pool),
+    #                     key=lambda x: x[1], reverse=True)
+    #     return [rid for rid, _ in scored[:k]]
+
+
+
+    print("rank_ids:", model, user_id, "has_history:", has_history, flush=True)
     if model == "svd" and has_history:
-        pool = _first_valid(svd.popular_recipe_ids, ok, SVD_POOL)
-        scored = sorted(((rid, svd.algo.predict(user_id, rid).est) for rid in pool),
-                        key=lambda x: x[1], reverse=True)
-        return [rid for rid, _ in scored[:k]]
+        ts = svd.algo.trainset
+        try:
+            uid = ts.to_inner_uid(user_id)
+        except ValueError:
+            uid = None 
+
+        if uid is not None:
+            rids, iids = [], []
+            for rid in svd.all_recipe_ids:      
+                rid = int(rid)
+                if not ok(rid):
+                    continue
+                try:
+                    iids.append(ts.to_inner_iid(rid))
+                    rids.append(rid)
+                except ValueError:
+                    pass                         
+
+            if rids:
+                iids = np.array(iids)
+                est = (ts.global_mean + svd.algo.bu[uid] + svd.algo.bi[iids]
+                       + svd.algo.qi[iids] @ svd.algo.pu[uid])
+                top = np.argsort(-est)[:k]
+                return [rids[i] for i in top]
 
     if model == "knn" and has_history:
         seeds = knn_seeds(user_id, df)
@@ -223,7 +253,7 @@ def get_onboarding(k: int = 12):
 def get_recommendations(user_id: int, model: str = "popularity", k: int = 10,
                         tags: list[str] = Query(default=[])):
     if model not in {m["id"] for m in MODELS}:
-        raise HTTPException(400, f"Modelo desconhecido: {model}")
+        raise HTTPException(400, f"Modelo enrich_recipes: {model}")
     ids = rank_ids(model, user_id, tags, k)
     return enrich_recipes(ids, S["recipe_df"], S["svd"].rating_stats)
 

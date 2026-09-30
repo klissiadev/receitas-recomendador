@@ -40,20 +40,26 @@ receitas-recomendador/
 │   └── relatorio.md       # Relatório completo do projeto
 ├── frontend/              # Interface do sistema
 ├── src/
+│   ├── main.py            # API FastAPI
 │   ├── preprocess.py      # Limpeza e estruturação das bases brutas
-│   ├── models.py          # Popularidade, kNN (TF-IDF) e SVD
-│   └── main.py            # API FastAPI
+│   ├── models.py          # Classes de recomendação (popularidade, SVD e conteúdo)
+│   ├── utils.py           # Funções auxiliares (filtro de itens vistos, enriquecimento de receitas, estatísticas de notas)
+│   └── model_training/
+│       ├── svd_training.py    # Dataset, validação cruzada, treino e persistência do SVD
+│       └── knn_training.py    # Treino do TF-IDF e persistência dos artefatos
 ├── .gitignore
 ├── .prettierignore
 ├── requirements.txt       # Dependências Python
 └── README.md
 ```
-
+ 
 | Pasta / arquivo | Responsabilidade |
 | --- | --- |
 | `data/` | Guia para baixar as bases do Food.com. |
 | `src/preprocess.py` | Remove linhas sem campos essenciais, duplicatas e interações de receitas fora do catálogo; preenche descrições vazias; converte `tags`, `steps`, `ingredients` e `nutrition` de texto `"[...]"` para listas Python. |
-| `src/models.py` | Implementação dos três modelos de recomendação. |
+| `src/models.py` | Classes de recomendação: `PopularityRecommender` (baseline por média bayesiana), `RecipeRecommender` (SVD, com fallback de popularidade), `ContentRecommender` (similaridade por conteúdo com TF-IDF), além das funções de cold start e onboarding. |
+| `src/utils.py` | Funções compartilhadas: `filter_seen_items`, `enrich_recipes` e `compute_rating_stats`. |
+| `src/model_training/` | Treino e persistência dos modelos. `svd_training.py` inclui a validação cruzada; `knn_training.py` gera os artefatos TF-IDF. Se o modelo já estiver salvo, ele é carregado em vez de treinado de novo. |
 | `src/main.py` | API: carrega dados e modelos na inicialização, gerencia o SQLite e expõe os endpoints. |
 | `frontend/` | Interface para navegar, receber recomendações e avaliar. |
 | `docs/` | Documentação do projeto. |

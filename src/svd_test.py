@@ -1,6 +1,7 @@
 import time
 
 from preprocess import prepare_data
+from model_training.svd_training import build_dataset, run_cross_validation
 from models import RecipeRecommender
 
 INTERACTIONS_PATH = '../data/RAW_interactions.csv'
@@ -11,6 +12,7 @@ N_FACTORS = 50
 MODEL_PATH = '../models/svd.pkl'
 NEW_USER_ID = -1
 FORCE_RETRAIN = False 
+RUN_CV = True
 
 
 def run_demo(recommender: RecipeRecommender, user_ids: list) -> None:
@@ -30,6 +32,14 @@ def run_demo(recommender: RecipeRecommender, user_ids: list) -> None:
         for _, row in recs.iterrows():
             print(f"  - {row['name']} (predicted rating: {row['predicted_rating']})")
 
+def print_cv(results: dict) -> None:
+    print("\nCross-validation (3 partições):")
+    for metric in ('test_rmse', 'test_mae'):
+        s = results[metric]
+        print(f"  {metric[5:].upper()}: {s.mean():.4f} ± {s.std():.4f}  "
+              f"(partições: {[round(float(x), 4) for x in s]})")
+    print(f"  Tempo médio de treino: {results['fit_time'].mean():.0f}s")
+
 
 def main():
     # 1. Pré-processamento
@@ -39,6 +49,10 @@ def main():
         min_ratings_per_user=MIN_RATINGS_PER_USER,
         min_ratings_per_recipe=MIN_RATINGS_PER_RECIPE,
     )
+
+    if RUN_CV:
+        results = run_cross_validation(build_dataset(user_df), n_factors=N_FACTORS)
+        print_cv(results)
 
     # 2. Recommender
     recommender = RecipeRecommender.get_or_train(

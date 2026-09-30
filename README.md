@@ -34,6 +34,7 @@ pip install -r requirements.txt
 # 4. Baixar os dados (ver data/README.md)
 
 # 5. Rodar a API
+cd src
 uvicorn main:app --reload --port 8000
 
 # 6. Rodar a interface
@@ -44,6 +45,6 @@ npm run dev
 
 ## Documentação
 - Relatório: [docs/relatorio.md](docs/relatorio.md)
-- Vídeo de demonstração: [link]
+- Vídeo de demonstração: https://youtu.be/Wcy85ch3wlU
 
 > Status: em desenvolvimento.

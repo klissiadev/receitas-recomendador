@@ -1,10 +1,6 @@
 """ main.py
 API FastAPI que expoe os modelos de recomendacao no contrato do api.ts.
 
-Rodar (na raiz do projeto):
-    pip install fastapi uvicorn
-    uvicorn main:app --reload --port 8000
-
 Endpoints:
     GET  /users
     POST /users                      {"name": "..."}
@@ -141,6 +137,12 @@ def _first_valid(ids, ok, k):
                 break
     return out
 
+def knn_seeds(user_id: int, df: pd.DataFrame) -> list:
+    mine = df[(df["user_id"] == user_id) & (df["rating"] >= LIKED_MIN)]
+    if "date" in mine.columns:
+        mine = mine.sort_values("date", ascending=False)
+    return mine["recipe_id"].head(KNN_SEEDS).tolist()
+
 
 def rank_ids(model: str, user_id: int, tags: list[str], k: int) -> list:
     svd: RecipeRecommender = S["svd"]
@@ -190,10 +192,7 @@ def rank_ids(model: str, user_id: int, tags: list[str], k: int) -> list:
                 return [rids[i] for i in top]
 
     if model == "knn" and has_history:
-        mine = df[(df["user_id"] == user_id) & (df["rating"] >= LIKED_MIN)]
-        if "date" in mine.columns:
-            mine = mine.sort_values("date", ascending=False)
-        seeds = mine["recipe_id"].head(KNN_SEEDS).tolist()
+        seeds = knn_seeds(user_id, df)
         if seeds:
             best: dict = {}
             for seed in seeds:
@@ -257,6 +256,15 @@ def get_recommendations(user_id: int, model: str = "popularity", k: int = 10,
         raise HTTPException(400, f"Modelo enrich_recipes: {model}")
     ids = rank_ids(model, user_id, tags, k)
     return enrich_recipes(ids, S["recipe_df"], S["svd"].rating_stats)
+
+@app.get("/recommendations/base")
+def get_knn_base(user_id: int):
+    seeds = knn_seeds(user_id, S["svd"].user_df)
+    if not seeds:
+        return None
+    rid = seeds[0]
+    names = S["recipe_df"].loc[S["recipe_df"]["id"] == rid, "name"]
+    return {"id": int(rid), "name": names.iloc[0]} if len(names) else None
 
 
 @app.get("/history/{user_id}")

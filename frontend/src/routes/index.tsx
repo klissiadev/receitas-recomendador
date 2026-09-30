@@ -1,3 +1,4 @@
+// index.tsx
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -17,6 +18,7 @@ import { RecipeDetailView } from "@/components/RecipeDetail";
 import {
   createUser,
   getHistory,
+  getKnnBase,
   getModels,
   getOnboarding,
   getRecommendations,
@@ -52,12 +54,12 @@ const REQUIRED_RATINGS = 3;
 
 const MODEL_INFO: Record<string, { icon: string; title: string; desc: string }> = {
   popularity: {
-    icon: "🔥",
+    icon: "",
     title: "Por popularidade",
     desc: "As receitas mais bem avaliadas por toda a comunidade, ideal para começar.",
   },
   knn: {
-    icon: "💡",
+    icon: "",
     title: "Porque você gostou de uma receita",
     desc: "Sugestões parecidas com os pratos que você já avaliou bem.",
   },
@@ -209,17 +211,17 @@ function HomeScreen({ onPick }: { onPick: (u: User) => void }) {
       <div className="grid gap-3 sm:grid-cols-3">
         {[
           {
-            icon: "🔥",
+            icon: "",
             title: "Por popularidade",
             desc: "Veja as receitas mais bem avaliadas pela comunidade.",
           },
           {
-            icon: "💡",
+            icon: "",
             title: "Feitas para você",
             desc: "Sugestões baseadas nos pratos que você já gostou.",
           },
           {
-            icon: "⭐",
+            icon: "",
             title: "Avalie e refine",
             desc: "Quanto mais você avalia, melhores ficam as recomendações.",
           },
@@ -346,11 +348,12 @@ function RecommendationsTab({
 }) {
   const [tags, setTags] = useState<string[]>([]);
   const [models, setModels] = useState<Model[]>([]);
-  const [model, setModel] = useState("popularity");
+  const [model, setModel] = useState("svd");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [items, setItems] = useState<RecipeSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [baseName, setBaseName] = useState<string | null>(null);
 
   useEffect(() => {
     getTags().then(setTags).catch(() => setTags([]));
@@ -368,6 +371,13 @@ function RecommendationsTab({
 
   useEffect(load, [load]);
 
+  useEffect(() => {
+    if (model !== "knn") return setBaseName(null);
+    getKnnBase(userId)
+      .then((b) => setBaseName(b?.name ?? null))
+      .catch(() => setBaseName(null));
+  }, [userId, model]);
+
   return (
     <div className="space-y-5">
       <section className="space-y-2">
@@ -376,10 +386,14 @@ function RecommendationsTab({
           {models.map((m) => {
             const active = model === m.id;
             const meta = MODEL_INFO[m.id] ?? {
-              icon: "✨",
+              icon: "",
               title: m.label,
               desc: "Sugestões personalizadas para você.",
             };
+            const desc =
+              m.id === "knn" && active && baseName
+                ? `Sugestões parecidas com "${baseName}", a última receita que você avaliou bem.`
+                : meta.desc;
             return (
               <button
                 key={m.id}
@@ -399,7 +413,7 @@ function RecommendationsTab({
                   {meta.title}
                 </span>
                 <span className="mt-1 block text-xs leading-relaxed text-soft">
-                  {meta.desc}
+                  {desc}
                 </span>
                 {active && (
                   <span className="mt-2 inline-block rounded-full bg-navy px-2.5 py-0.5 text-[11px] font-semibold text-background">
@@ -417,7 +431,7 @@ function RecommendationsTab({
         <p className="text-xs text-soft">
           Toque nas tags para refinar as sugestões. Toque de novo para remover.
         </p>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex max-h-21 flex-wrap gap-2 overflow-y-auto pr-1">
           {tags.map((t) => {
             const active = selectedTags.includes(t);
             return (

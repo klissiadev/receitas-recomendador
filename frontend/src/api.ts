@@ -135,6 +135,14 @@ export async function getRecommendations(
   });
 }
 
+export async function getKnnBase(
+  userId: number,
+): Promise<{ id: number; name: string } | null> {
+  return request<{ id: number; name: string } | null>("/recommendations/base", {
+    params: { user_id: userId },
+  });
+}
+
 export async function getHistory(userId: number): Promise<HistoryItem[]> {
   return request<HistoryItem[]>(`/history/${userId}`);
 }

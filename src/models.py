@@ -1,4 +1,5 @@
 """
+models.py
 Modelos de recomendacao.
 
     - PopularityRecommender: baseline por popularidade (media bayesiana).

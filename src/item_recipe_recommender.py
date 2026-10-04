@@ -1,6 +1,6 @@
 import pandas as pd
 
-from recommender_test import cosseno_alg
+from cs import cosseno_alg
 from utils import enrich_recipes, compute_rating_stats
 
 

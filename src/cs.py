@@ -137,30 +137,6 @@ def compute_similar_items(item_id, items, user_items, k=50, min_common=3,
     sims.sort(key=lambda x: x[1], reverse=True)
     return sims[:k]
 
-def evaluate(train_users, test_users, sim_users, label):
-    random.seed(42)
-    candidatos = [u for u in test_users if u in train_users]
-    amostra = random.sample(candidatos, min(N_USERS_TEST, len(candidatos)))
-
-    hits, usuarios_com_hit, sem_rec = 0, 0, 0
-    for u in amostra:
-        recs = recommend_recipes(
-            u, train_users, None, num_recommendations=TOP_N,
-            k=K, min_neighbors=MIN_NEIGHBORS, min_common=MIN_COMMON,
-            sim_users=sim_users,
-        )
-        if not recs:
-            sem_rec += 1
-            continue
-        h = len({rid for rid, _ in recs} & set(test_users[u]))
-        hits += h
-        usuarios_com_hit += h > 0
-
-    n = len(amostra)
-    print(f'[{label}] usuarios: {n} | sem recomendacao: {sem_rec} | '
-          f'acertos totais: {hits} | hit-rate@{TOP_N}: {usuarios_com_hit / n:.2%}')
-
-
 def get_similar_recipes(item_id, items, user_items, nomes, n=10,
                         min_common=3, alpha=1.0, exclude=None):
         
@@ -175,49 +151,3 @@ def precompute_item_neighbors(items, k=50, min_common=3, alpha=1.0):
         i: compute_similar_items(i, items, user_items, k, min_common, alpha)
         for i in items
     }
-
-
-def main():
-    interactions, recipes = get_data(
-        INTERACTIONS_PATH, RECIPES_PATH,
-        min_ratings_per_user=10, min_ratings_per_recipe=5,
-    )
-    train, test = split_leave_last_out(interactions)
-
-    nomes = dict(zip(recipes['id'], recipes['name']))
-    print(f'Treino: {len(train):,} | Teste: {len(test):,}')
-
-    nomes = dict(zip(recipes['id'], recipes['name']))
-    train_users = build_users(train)
-    test_users = build_users(test)
-
-    evaluate(train_users, test_users, None, 'cosseno')
-
-    evaluate(train_users, test_users, center_users(train_users), 'pearson')
-
-    u = next(iter(test_users))
-    print(f'\nRecomendacoes para o usuario {u}:')
-    for rid, score in recommend_recipes(
-        u, train_users, nomes, num_recommendations=5,
-        k=K, min_neighbors=MIN_NEIGHBORS, min_common=MIN_COMMON,
-    ):
-        print(f'  {score:.2f}  {nomes.get(rid, rid)}')
-
-        # receitas similares à última avaliada pelo usuário (no treino)
-    items = build_items(train)
-    user_items = build_user_items(items)
-
-    last_rid = (train[train['user_id'] == u]
-                .sort_values('date')
-                .iloc[-1]['recipe_id'])
-
-    print(f'\nSimilares à última receita avaliada ({nomes.get(last_rid, last_rid)}):')
-    for rid, nome, sim in get_similar_recipes(
-        last_rid, items, user_items, nomes, n=5,
-        min_common=3, alpha=0.5, exclude=set(train_users[u]),
-    ):
-        print(f'  {sim:.2f}  {nome}')
-
-
-if __name__ == '__main__':
-    main()

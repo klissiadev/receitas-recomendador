@@ -58,7 +58,7 @@ const MODEL_INFO: Record<string, { icon: string; title: string; desc: string }> 
     title: "Por popularidade",
     desc: "As receitas mais bem avaliadas por toda a comunidade, ideal para começar.",
   },
-  knn: {
+  item_based: {
     icon: "",
     title: "Porque você gostou de uma receita",
     desc: "Sugestões parecidas com os pratos que você já avaliou bem.",
@@ -372,7 +372,7 @@ function RecommendationsTab({
   useEffect(load, [load]);
 
   useEffect(() => {
-    if (model !== "knn") return setBaseName(null);
+    if (model !== "item_based") return setBaseName(null);
     getKnnBase(userId)
       .then((b) => setBaseName(b?.name ?? null))
       .catch(() => setBaseName(null));
@@ -391,7 +391,7 @@ function RecommendationsTab({
               desc: "Sugestões personalizadas para você.",
             };
             const desc =
-              m.id === "knn" && active && baseName
+              m.id === "item_based" && active && baseName
                 ? `Sugestões parecidas com "${baseName}", a última receita que você avaliou bem.`
                 : meta.desc;
             return (

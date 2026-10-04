@@ -1,6 +1,6 @@
 import pandas as pd
 
-from recommender_test import recommend_recipes, center_users
+from cs import recommend_recipes, center_users
 from utils import filter_seen_items, enrich_recipes, compute_rating_stats
 
 

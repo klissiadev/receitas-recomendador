@@ -27,8 +27,9 @@ from pydantic import BaseModel
 from preprocess import prepare_data, parse_recipe_columns
 from utils import (compute_rating_stats, enrich_recipes, get_recipe_detail,
                    get_user_history, get_seen_recipe_ids)
-from models import PopularityRecommender, ContentRecommender
+from models import PopularityRecommender
 from recipe_recommender import RecipeRecommender
+from item_recipe_recommender import ItemRecipeRecommender
 
 # ---------------------------------------------------------------------------
 # Configuracao
@@ -38,15 +39,14 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.getenv("DATA_DIR", os.path.join(BASE_DIR, "..", "data"))
 INTERACTIONS_PATH = os.path.join(DATA_DIR, "RAW_interactions.csv")
 RECIPES_PATH = os.path.join(DATA_DIR, "RAW_recipes.csv")
-CONTENT_PATH = os.getenv("CONTENT_PATH", os.path.join(BASE_DIR, "content_similarity_artifacts.pkl"))
+
 DB_PATH = os.getenv("DB_PATH", os.path.join(BASE_DIR, "app.db"))
 
-KNN_SEEDS = 3       # quantas receitas curtidas servem de base para o "knn"
 LIKED_MIN = 4       # nota minima para considerar que o usuario gostou
 
 MODELS = [
     {"id": "popularity", "label": "Por popularidade"},
-    {"id": "knn", "label": "Porque você gostou de uma receita"},
+    {"id": "item_based", "label": "Porque você gostou de uma receita"},
     {"id": "user_based", "label": "Personalizado para você"},
 ]
 
@@ -107,14 +107,16 @@ async def lifespan(app: FastAPI):
         user_df, recipe_df,
         k=50, min_neighbors=2, min_common=2, pearson=False,
     )
-    
-    content = ContentRecommender.get_or_train(
-        CONTENT_PATH, recipe_df, rating_stats=user_based.rating_stats)
+
+    item_based = ItemRecipeRecommender(
+        user_df, recipe_df,
+        k=50, min_common=3, min_seed_rating=LIKED_MIN,
+    )
  
     S.update(
         recipe_df=recipe_df,
         user_based=user_based,
-        content=content,
+        item_based=item_based,
         popularity=popularity,
         pop_ids=popularity.ranking_["recipe_id"].tolist(),
         tags_by_id={rid: set(t) for rid, t in zip(recipe_df["id"], recipe_df["tags"])},
@@ -141,15 +143,10 @@ def _first_valid(ids, ok, k):
                 break
     return out
 
-def knn_seeds(user_id: int, df: pd.DataFrame) -> list:
-    mine = df[(df["user_id"] == user_id) & (df["rating"] >= LIKED_MIN)]
-    if "date" in mine.columns:
-        mine = mine.sort_values("date", ascending=False)
-    return mine["recipe_id"].head(KNN_SEEDS).tolist()
-
 
 def rank_ids(model: str, user_id: int, tags: list[str], k: int) -> list:
     user_based: RecipeRecommender = S["user_based"]
+    item_based: ItemRecipeRecommender = S["item_based"]
     df = user_based.user_df
     seen = get_seen_recipe_ids(user_id, df)
     need = set(tags)
@@ -169,16 +166,13 @@ def rank_ids(model: str, user_id: int, tags: list[str], k: int) -> list:
         have = set(ids)
         return ids + _first_valid(S["pop_ids"], lambda rid: rid not in have and ok(rid), k - len(ids))
 
-    if model == "knn" and has_history:
-        seeds = knn_seeds(user_id, df)
-        if seeds:
-            best: dict = {}
-            for seed in seeds:
-                sims = S["content"].get_similar_recipes(seed, n=100, exclude=seen)
-                for rid, sim in zip(sims.get("recipe_id", []), sims.get("similarity", [])):
-                    best[rid] = max(best.get(rid, 0), sim)
-            ranked = sorted(best, key=best.get, reverse=True)
-            return _first_valid(ranked, ok, k)
+    if model == "item_based" and has_history:
+        ids = item_based.recommend_ids(user_id, n=k, accept=ok)
+        if len(ids) >= k:
+            return ids
+        # poucos vizinhos / tags restritivas: completa com populares (mesmo filtro)
+        have = set(ids)
+        return ids + _first_valid(S["pop_ids"], lambda rid: rid not in have and ok(rid), k - len(ids))
 
     # popularity (e fallback para usuario sem historico / sem nota alta)
     return _first_valid(S["pop_ids"], ok, k)
@@ -237,10 +231,12 @@ def get_recommendations(user_id: int, model: str = "popularity", k: int = 10,
 
 @app.get("/recommendations/base")
 def get_knn_base(user_id: int):
-    seeds = knn_seeds(user_id, S["user_based"].user_df)
-    if not seeds:
+    item_based: ItemRecipeRecommender = S["item_based"]
+    if not item_based.has_history(user_id):
         return None
-    rid = seeds[0]
+    rid = item_based._seed(user_id)
+    if rid is None:
+        return None
     names = S["recipe_df"].loc[S["recipe_df"]["id"] == rid, "name"]
     return {"id": int(rid), "name": names.iloc[0]} if len(names) else None
 
@@ -275,7 +271,7 @@ def post_rating(body: NewRating):
 
     user_based: RecipeRecommender = S["user_based"]
     user_based.add_rating(body.user_id, body.recipe_id, body.rating, date=today)
-    S["content"].rating_stats = user_based.rating_stats
+    S["item_based"].add_rating(body.user_id, body.recipe_id, body.rating, date=today)
     return {"ok": True}
 
 

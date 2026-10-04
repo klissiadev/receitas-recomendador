@@ -348,7 +348,7 @@ function RecommendationsTab({
 }) {
   const [tags, setTags] = useState<string[]>([]);
   const [models, setModels] = useState<Model[]>([]);
-  const [model, setModel] = useState("svd");
+  const [model, setModel] = useState("user_based");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [items, setItems] = useState<RecipeSummary[]>([]);
   const [loading, setLoading] = useState(true);

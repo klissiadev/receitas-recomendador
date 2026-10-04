@@ -20,7 +20,6 @@ from surprise import SVD
 from sklearn.metrics.pairwise import cosine_similarity
 
 from utils import filter_seen_items, enrich_recipes, compute_rating_stats
-from model_training.svd_training import build_dataset, run_cross_validation, train_svd, save_model, load_model
 from model_training.knn_training import train_tfidf, save_artifacts, load_artifacts
 
 
@@ -147,126 +146,126 @@ def onboarding_recipes(recipes_df: pd.DataFrame, popularity_model: PopularityRec
 # SVD
 # ---------------------------------------------------------------------------
 
-class RecipeRecommender:
-    def __init__(self, algo: SVD, user_df: pd.DataFrame, recipe_df: pd.DataFrame):
-        self.algo = algo
-        self.user_df = user_df.copy()
-        self.recipe_df = recipe_df.copy()
-        self.all_recipe_ids = self.recipe_df['id'].unique()
-        self.rating_stats = compute_rating_stats(self.user_df)
+# class RecipeRecommender:
+#     def __init__(self, algo: SVD, user_df: pd.DataFrame, recipe_df: pd.DataFrame):
+#         self.algo = algo
+#         self.user_df = user_df.copy()
+#         self.recipe_df = recipe_df.copy()
+#         self.all_recipe_ids = self.recipe_df['id'].unique()
+#         self.rating_stats = compute_rating_stats(self.user_df)
 
-        self._stats = self._compute_weighted_scores()
-        self.popular_recipe_ids = (
-            self._stats.sort_values('weighted_score', ascending=False).index.tolist()
-        )
+#         self._stats = self._compute_weighted_scores()
+#         self.popular_recipe_ids = (
+#             self._stats.sort_values('weighted_score', ascending=False).index.tolist()
+#         )
 
-    # -- helpers ----------------------------------------------------------
+#     # -- helpers ----------------------------------------------------------
 
-    def _to_frame(self, ids, predicted: dict | None = None) -> pd.DataFrame:
-        """ids -> DataFrame com todos os campos do RecipeSummary.
-        Mantem `recipe_id` por compatibilidade com o codigo antigo."""
-        records = enrich_recipes(ids, self.recipe_df, self.rating_stats)
-        for rec in records:
-            rec['recipe_id'] = rec['id']
-            if predicted is not None:
-                rec['predicted_rating'] = round(float(predicted[rec['id']]), 2)
-        return pd.DataFrame(records)
+#     def _to_frame(self, ids, predicted: dict | None = None) -> pd.DataFrame:
+#         """ids -> DataFrame com todos os campos do RecipeSummary.
+#         Mantem `recipe_id` por compatibilidade com o codigo antigo."""
+#         records = enrich_recipes(ids, self.recipe_df, self.rating_stats)
+#         for rec in records:
+#             rec['recipe_id'] = rec['id']
+#             if predicted is not None:
+#                 rec['predicted_rating'] = round(float(predicted[rec['id']]), 2)
+#         return pd.DataFrame(records)
 
-    def _compute_weighted_scores(self) -> pd.DataFrame:
-        stats = self.user_df.groupby('recipe_id')['rating'].agg(['mean', 'count'])
-        c = stats['count'].mean()
-        m = stats['mean'].mean()
-        stats['weighted_score'] = (
-            (stats['count'] / (stats['count'] + c)) * stats['mean']
-            + (c / (stats['count'] + c)) * m
-        )
-        return stats
+#     def _compute_weighted_scores(self) -> pd.DataFrame:
+#         stats = self.user_df.groupby('recipe_id')['rating'].agg(['mean', 'count'])
+#         c = stats['count'].mean()
+#         m = stats['mean'].mean()
+#         stats['weighted_score'] = (
+#             (stats['count'] / (stats['count'] + c)) * stats['mean']
+#             + (c / (stats['count'] + c)) * m
+#         )
+#         return stats
 
-    # -- construcao -------------------------------------------------------
+#     # -- construcao -------------------------------------------------------
 
-    @classmethod
-    def from_pretrained(cls, model_path: str, user_df: pd.DataFrame,
-                        recipe_df: pd.DataFrame) -> "RecipeRecommender":
-        algo = load_model(model_path)
-        return cls(algo, user_df, recipe_df)
+#     @classmethod
+#     def from_pretrained(cls, model_path: str, user_df: pd.DataFrame,
+#                         recipe_df: pd.DataFrame) -> "RecipeRecommender":
+#         algo = load_model(model_path)
+#         return cls(algo, user_df, recipe_df)
 
-    @classmethod
-    def train_new(
-        cls,
-        user_df: pd.DataFrame,
-        recipe_df: pd.DataFrame,
-        n_factors: int = 50,
-        model_path: str | None = None,
-        run_cv: bool = True,
-    ) -> "RecipeRecommender":
-        data = build_dataset(user_df)
-        if run_cv:
-            run_cross_validation(data, n_factors=n_factors)
-        algo, _ = train_svd(data, n_factors=n_factors)
-        if model_path:
-            save_model(algo, model_path)
-        return cls(algo, user_df, recipe_df)
+#     @classmethod
+#     def train_new(
+#         cls,
+#         user_df: pd.DataFrame,
+#         recipe_df: pd.DataFrame,
+#         n_factors: int = 50,
+#         model_path: str | None = None,
+#         run_cv: bool = True,
+#     ) -> "RecipeRecommender":
+#         data = build_dataset(user_df)
+#         if run_cv:
+#             run_cross_validation(data, n_factors=n_factors)
+#         algo, _ = train_svd(data, n_factors=n_factors)
+#         if model_path:
+#             save_model(algo, model_path)
+#         return cls(algo, user_df, recipe_df)
 
-    @classmethod
-    def get_or_train(
-        cls,
-        model_path: str,
-        user_df: pd.DataFrame,
-        recipe_df: pd.DataFrame,
-        n_factors: int = 50,
-        force_retrain: bool = False,
-    ) -> "RecipeRecommender":
-        if not force_retrain and os.path.exists(model_path):
-            return cls.from_pretrained(model_path, user_df, recipe_df)
-        return cls.train_new(user_df, recipe_df, n_factors=n_factors, model_path=model_path)
+#     @classmethod
+#     def get_or_train(
+#         cls,
+#         model_path: str,
+#         user_df: pd.DataFrame,
+#         recipe_df: pd.DataFrame,
+#         n_factors: int = 50,
+#         force_retrain: bool = False,
+#     ) -> "RecipeRecommender":
+#         if not force_retrain and os.path.exists(model_path):
+#             return cls.from_pretrained(model_path, user_df, recipe_df)
+#         return cls.train_new(user_df, recipe_df, n_factors=n_factors, model_path=model_path)
 
-    # -- consultas --------------------------------------------------------
+#     # -- consultas --------------------------------------------------------
 
-    def has_history(self, user_id) -> bool:
-        return user_id in set(self.user_df['user_id'])
+#     def has_history(self, user_id) -> bool:
+#         return user_id in set(self.user_df['user_id'])
 
-    def get_user_history(self, user_id) -> pd.DataFrame:
-        """Receitas avaliadas pelo usuario (campos completos + rating + date),
-        da mais recente para a mais antiga."""
-        cols = ['recipe_id', 'rating'] + (['date'] if 'date' in self.user_df.columns else [])
-        rated = self.user_df.loc[self.user_df['user_id'] == user_id, cols]
-        if rated.empty:
-            return pd.DataFrame()
+#     def get_user_history(self, user_id) -> pd.DataFrame:
+#         """Receitas avaliadas pelo usuario (campos completos + rating + date),
+#         da mais recente para a mais antiga."""
+#         cols = ['recipe_id', 'rating'] + (['date'] if 'date' in self.user_df.columns else [])
+#         rated = self.user_df.loc[self.user_df['user_id'] == user_id, cols]
+#         if rated.empty:
+#             return pd.DataFrame()
 
-        sort_col = 'date' if 'date' in cols else 'rating'
-        rated = rated.sort_values(sort_col, ascending=False)
-        frame = self._to_frame(rated['recipe_id'].tolist())
-        return rated.merge(frame, on='recipe_id').reset_index(drop=True)
+#         sort_col = 'date' if 'date' in cols else 'rating'
+#         rated = rated.sort_values(sort_col, ascending=False)
+#         frame = self._to_frame(rated['recipe_id'].tolist())
+#         return rated.merge(frame, on='recipe_id').reset_index(drop=True)
 
-    def get_popular_recommendations(self, n: int = 10, exclude: set | None = None) -> pd.DataFrame:
-        exclude = exclude or set()
-        top_ids = [rid for rid in self.popular_recipe_ids if rid not in exclude][:n]
-        means = self._stats['mean'].to_dict()
-        return self._to_frame(top_ids, predicted=means)
+#     def get_popular_recommendations(self, n: int = 10, exclude: set | None = None) -> pd.DataFrame:
+#         exclude = exclude or set()
+#         top_ids = [rid for rid in self.popular_recipe_ids if rid not in exclude][:n]
+#         means = self._stats['mean'].to_dict()
+#         return self._to_frame(top_ids, predicted=means)
 
-    def get_recommendations(self, user_id, n: int = 10) -> pd.DataFrame:
-        already_rated = set(self.user_df.loc[self.user_df['user_id'] == user_id, 'recipe_id'])
+#     def get_recommendations(self, user_id, n: int = 10) -> pd.DataFrame:
+#         already_rated = set(self.user_df.loc[self.user_df['user_id'] == user_id, 'recipe_id'])
 
-        if not self.has_history(user_id):
-            return self.get_popular_recommendations(n=n, exclude=already_rated)
+#         if not self.has_history(user_id):
+#             return self.get_popular_recommendations(n=n, exclude=already_rated)
 
-        candidates = [rid for rid in self.all_recipe_ids if rid not in already_rated]
-        scored = sorted(
-            ((rid, self.algo.predict(user_id, rid).est) for rid in candidates),
-            key=lambda x: x[1], reverse=True,
-        )[:n]
-        return self._to_frame([rid for rid, _ in scored], predicted=dict(scored))
+#         candidates = [rid for rid in self.all_recipe_ids if rid not in already_rated]
+#         scored = sorted(
+#             ((rid, self.algo.predict(user_id, rid).est) for rid in candidates),
+#             key=lambda x: x[1], reverse=True,
+#         )[:n]
+#         return self._to_frame([rid for rid, _ in scored], predicted=dict(scored))
 
-    def add_rating(self, user_id, recipe_id, rating, date=None) -> None:
-        """Adiciona (ou substitui) a nota do usuario para a receita, em memoria."""
-        row = {'user_id': user_id, 'recipe_id': recipe_id, 'rating': rating}
-        if 'date' in self.user_df.columns:
-            row['date'] = date or pd.Timestamp.today().strftime('%Y-%m-%d')
+#     def add_rating(self, user_id, recipe_id, rating, date=None) -> None:
+#         """Adiciona (ou substitui) a nota do usuario para a receita, em memoria."""
+#         row = {'user_id': user_id, 'recipe_id': recipe_id, 'rating': rating}
+#         if 'date' in self.user_df.columns:
+#             row['date'] = date or pd.Timestamp.today().strftime('%Y-%m-%d')
 
-        mask = (self.user_df['user_id'] == user_id) & (self.user_df['recipe_id'] == recipe_id)
-        self.user_df = pd.concat([self.user_df[~mask], pd.DataFrame([row])], ignore_index=True)
-        self.rating_stats = compute_rating_stats(self.user_df)
-        # TODO: persistir tambem no CSV de interacoes
+#         mask = (self.user_df['user_id'] == user_id) & (self.user_df['recipe_id'] == recipe_id)
+#         self.user_df = pd.concat([self.user_df[~mask], pd.DataFrame([row])], ignore_index=True)
+#         self.rating_stats = compute_rating_stats(self.user_df)
+#         # TODO: persistir tambem no CSV de interacoes
 
 
 # ---------------------------------------------------------------------------

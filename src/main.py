@@ -27,7 +27,8 @@ from pydantic import BaseModel
 from preprocess import prepare_data, parse_recipe_columns
 from utils import (compute_rating_stats, enrich_recipes, get_recipe_detail,
                    get_user_history, get_seen_recipe_ids)
-from models import PopularityRecommender, RecipeRecommender, ContentRecommender
+from models import PopularityRecommender, ContentRecommender
+from recipe_recommender import RecipeRecommender
 
 # ---------------------------------------------------------------------------
 # Configuracao
@@ -94,19 +95,24 @@ def init_db(user_df: pd.DataFrame) -> pd.DataFrame:
 async def lifespan(app: FastAPI):
     user_df, recipe_df = prepare_data(INTERACTIONS_PATH, RECIPES_PATH)
     recipe_df = parse_recipe_columns(recipe_df)
-
+ 
     new_ratings = init_db(user_df)
     if not new_ratings.empty:
         # notas do app substituem as do dataset para o mesmo par usuario/receita
         key = ["user_id", "recipe_id"]
         user_df = pd.concat([user_df, new_ratings], ignore_index=True)
         user_df = user_df.drop_duplicates(subset=key, keep="last")
-
+ 
     popularity = PopularityRecommender().fit(user_df)
-    svd = RecipeRecommender.get_or_train(SVD_PATH, user_df, recipe_df)
+ 
+    svd = RecipeRecommender(
+        user_df, recipe_df,
+        k=50, min_neighbors=2, min_common=2, pearson=False,
+    )
+    
     content = ContentRecommender.get_or_train(
         CONTENT_PATH, recipe_df, rating_stats=svd.rating_stats)
-
+ 
     S.update(
         recipe_df=recipe_df,
         svd=svd,
@@ -156,40 +162,14 @@ def rank_ids(model: str, user_id: int, tags: list[str], k: int) -> list:
 
     has_history = svd.has_history(user_id)
 
-    # if model == "svd" and has_history:
-    #     pool = _first_valid(svd.popular_recipe_ids, ok, SVD_POOL)
-    #     scored = sorted(((rid, svd.algo.predict(user_id, rid, clip=False).est) for rid in pool),
-    #                     key=lambda x: x[1], reverse=True)
-    #     return [rid for rid, _ in scored[:k]]
-
-
-
     print("rank_ids:", model, user_id, "has_history:", has_history, flush=True)
     if model == "svd" and has_history:
-        ts = svd.algo.trainset
-        try:
-            uid = ts.to_inner_uid(user_id)
-        except ValueError:
-            uid = None 
-
-        if uid is not None:
-            rids, iids = [], []
-            for rid in svd.all_recipe_ids:      
-                rid = int(rid)
-                if not ok(rid):
-                    continue
-                try:
-                    iids.append(ts.to_inner_iid(rid))
-                    rids.append(rid)
-                except ValueError:
-                    pass                         
-
-            if rids:
-                iids = np.array(iids)
-                est = (ts.global_mean + svd.algo.bu[uid] + svd.algo.bi[iids]
-                       + svd.algo.qi[iids] @ svd.algo.pu[uid])
-                top = np.argsort(-est)[:k]
-                return [rids[i] for i in top]
+        ids = svd.recommend_ids(user_id, n=k, accept=ok)
+        if len(ids) >= k:
+            return ids
+        # poucos vizinhos / tags restritivas: completa com populares (mesmo filtro)
+        have = set(ids)
+        return ids + _first_valid(S["pop_ids"], lambda rid: rid not in have and ok(rid), k - len(ids))
 
     if model == "knn" and has_history:
         seeds = knn_seeds(user_id, df)

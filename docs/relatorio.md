@@ -6,17 +6,16 @@
 
 ## 1. Objetivo
 
-Plataformas de culinária reúnem centenas de milhares de receitas, o que frequentemente gera sobrecarga de informação para os usuários ao tentarem encontrar opções alinhadas às suas preferências. Este trabalho constrói e avalia um sistema de recomendação de receitas personalizado utilizando algoritmos de **filtragem colaborativa** com base no histórico de interações do portal **Food.com**.
+Plataformas de culinária reúnem centenas de milhares de receitas, o que frequentemente gera sobrecarga de informação para os usuários ao tentarem encontrar opções alinhadas às suas preferências. Este trabalho constrói e avalia um sistema de recomendação de receitas personalizado, utilizando algoritmos de **filtragem colaborativa** sobre o histórico de interações do portal **Food.com**.
 
-**Objetivo Geral:** Desenvolver e avaliar um sistema interativo que gere recomendações personalizadas de receitas culinárias para usuários cadastrados, excluindo itens já avaliados por eles.
+**Objetivo Geral:** Desenvolver e avaliar um sistema interativo que gere recomendações personalizadas de receitas culinárias para usuários, excluindo itens já avaliados por eles.
 
 **Objetivos Específicos:**
 
-* Processar e estruturar as bases de dados brutas de interações e receitas do Food.com.
-* Implementar e comparar modelos de recomendação: baseline por popularidade (Média Bayesiana), filtragem baseada em conteúdo por vizinhança (kNN) e filtragem colaborativa por fatoração de matrizes (SVD).
+* Implementar e comparar duas abordagens: A filtragem colaborativa baseada em usuários (*user-based*) e a filtragem colaborativa baseada em itens (*item-based*), ambas com similaridade do cosseno.
 * Tratar o problema do início a frio (*cold start*) para novos usuários sem histórico de interações.
-* Disponibilizar uma interface funcional para navegação, consulta de histórico, obtenção de recomendações e inserção de avaliações.
-* Avaliar o desempenho dos modelos por meio de métricas de acurácia de ranking, cobertura de catálogo e testes de usabilidade com usuários.
+* Disponibilizar uma interface funcional para navegação, consulta de histórico, obtenção de recomendações com filtro por tags e inserção de avaliações.
+* Avaliar os modelos personalizados por meio de um teste com usuários, usando as métricas *precision* e *hit rate*.
 
 ---
 
@@ -28,91 +27,69 @@ Sistemas de Recomendação (SRs) estimam a utilidade $\hat{R}(u,i)$ de um item $
 
 A **Filtragem Colaborativa (FC)** utiliza exclusivamente o histórico comportamental coletivo contido na matriz usuário-item $R \in \mathbb{R}^{M \times N}$, cujas entradas $R_{u,i}$ indicam a avaliação atribuída por $u$ a $i$. Devido à alta esparsidade dessa matriz, dividem-se as abordagens em:
 
-* **Métodos baseados em memória (vizinhança):** calculam similaridades diretas entre usuários (*User-Based*) ou itens (*Item-Based*).
-* **Métodos baseados em modelo:** utilizam técnicas de redução de dimensionalidade e aprendizado para prever preferências.
+* **Métodos baseados em memória (vizinhança):** calculam similaridades diretas entre usuários (*user-based*) ou itens (*item-based*). São os métodos adotados neste trabalho.
+* **Métodos baseados em modelo:** utilizam redução de dimensionalidade e aprendizado (por exemplo, fatoração de matrizes) para prever preferências.
 
-### 2.2 Filtragem Baseada em Conteúdo por Vizinhança (kNN)
+### 2.2 Similaridade do Cosseno
 
-A abordagem baseada em conteúdo recomenda itens semelhantes aos que o usuário já avaliou bem, usando apenas os **atributos dos itens**, sem depender das avaliações de outros usuários. Por isso, ela não sofre com a esparsidade da matriz $R$ e atende melhor usuários novatos, que possuem poucas avaliações.
+Dois vetores esparsos de avaliações $x$ e $y$ são comparados apenas nas posições em que ambos possuem nota (conjunto $C$ de itens ou usuários em comum):
 
-Cada receita $i$ é representada por um vetor $\mathbf{v}_i$ obtido pela ponderação **TF-IDF** do texto de seus ingredientes e tags. O peso de um termo $t$ na receita $i$ é:
+$$\text{sim}(x, y) = \frac{\sum_{c \in C} x_c \, y_c}{\sqrt{\sum_{c \in C} x_c^2} \; \sqrt{\sum_{c \in C} y_c^2}}$$
 
-$$
-\text{tfidf}(t, i) = \text{tf}(t, i) \cdot \text{idf}(t), \qquad \text{idf}(t) = \ln\!\left(\frac{1 + N}{1 + \text{df}(t)}\right) + 1
-$$
+Como as notas são positivas, a similaridade fica entre 0 e 1. Pares com menos de $m_c$ elementos em comum recebem similaridade 0, pois similaridades calculadas sobre um ou dois pontos são instáveis (por exemplo, um único item em comum sempre resulta em 1).
 
-onde $\text{tf}(t, i)$ é a frequência do termo na receita, $\text{df}(t)$ é o número de receitas que contêm o termo e $N$ é o total de receitas do catálogo. Assim, termos raros e mais discriminativos recebem peso maior do que termos comuns.
+### 2.3 Filtragem Colaborativa Baseada em Usuários (User-Based)
 
-A similaridade entre as receitas $i$ e $j$ é calculada pela **Similaridade do Cosseno** entre seus vetores:
+A similaridade entre os usuários $u$ e $v$ é o cosseno de seus vetores de avaliações, calculado sobre as receitas que ambos avaliaram. Seja $N_k(u)$ o conjunto dos $k$ usuários mais similares a $u$ (com similaridade positiva). A nota prevista de $u$ para uma receita $i$ ainda não avaliada é a média das notas dos vizinhos que avaliaram $i$, ponderada pela similaridade:
 
-$$
-\text{sim}(i, j) = \frac{\mathbf{v}_i \cdot \mathbf{v}_j}{\lVert \mathbf{v}_i \rVert \, \lVert \mathbf{v}_j \rVert}
-$$
+$$\hat{R}_{u,i} = \frac{\sum_{v \in N_k(u),\, v \text{ avaliou } i} \text{sim}(u,v) \cdot R_{v,i}}{\sum_{v \in N_k(u),\, v \text{ avaliou } i} \text{sim}(u,v)}$$
 
-Para recomendar a um usuário $u$, define-se o conjunto de **sementes** $S_u$, formado pelas receitas mais recentes que ele avaliou com nota alta ($R_{u,i} \geq 4$). A pontuação de uma receita candidata $j$, ainda não avaliada por $u$, é a maior similaridade com qualquer semente (vizinho mais próximo):
+Exige-se um número mínimo de vizinhos que tenham avaliado $i$, para que uma receita com um único voto não domine o ranking. As receitas são recomendadas em ordem decrescente de $\hat{R}_{u,i}$.
 
-$$
-\text{score}(u, j) = \max_{s \in S_u} \, \text{sim}(s, j)
-$$
+### 2.4 Filtragem Colaborativa Baseada em Itens (Item-Based)
 
-As receitas com maior pontuação compõem a lista de recomendação. Diferentemente da filtragem colaborativa *item-based* clássica (Sarwar et al., 2001), que calcula a similaridade entre itens a partir dos padrões de avaliação dos usuários, aqui a similaridade vem exclusivamente do conteúdo das receitas. Como limitação, o modelo tende a recomendar itens muito parecidos com os já consumidos, com pouca diversidade.
+A abordagem *item-based* explora a maior estabilidade das relações entre itens em comparação às preferências dos usuários (Sarwar et al., 2001). A similaridade entre as receitas $i$ e $j$ é o cosseno de seus vetores de avaliações, calculado sobre os usuários que avaliaram ambas:
 
-### 2.3 Fatoração de Matrizes (SVD)
+$$\text{sim}(i, j) = \frac{\sum_{u \in U_{ij}} R_{u,i} \, R_{u,j}}{\sqrt{\sum_{u \in U_{ij}} R_{u,i}^2} \; \sqrt{\sum_{u \in U_{ij}} R_{u,j}^2}}$$
 
-A fatoração de matrizes projeta usuários e itens em um espaço latente $k \ll \min(M, N)$, decompondo $R \approx P \cdot Q^T$. Incorporando vieses globais ($\mu$), de usuário ($b_u$) e de item ($b_i$), a predição é expressa por:
+Na formulação clássica, a nota prevista é a média das notas do usuário nos itens vizinhos, ponderada pela similaridade. Neste trabalho, a recomendação é ancorada em uma única receita: a **semente** $s_u$, definida como a receita mais recente que o usuário avaliou com nota $\geq 4$. As receitas ainda não avaliadas são ranqueadas por $\text{sim}(s_u, j)$, e o sistema mostra as de maior similaridade. Como nenhuma nota é prevista, essa abordagem funciona como "quem gostou desta receita também gostaria destas".
 
-$$
-\hat{R}_{u,i} = \mu + b_u + b_i + p_u \cdot q_i^T
-$$
-
-A otimização minimiza o erro quadrático com regularização $\lambda$:
-
-$$
-\min_{P, Q, b} \sum_{(u,i) \in R_{\text{treino}}} \left( R_{u,i} - \left( \mu + b_u + b_i + p_u \cdot q_i^T \right) \right)^2 + \lambda \left( \lVert p_u \rVert_2^2 + \lVert q_i \rVert_2^2 + b_u^2 + b_i^2 \right)
-$$
-
-### 2.4 Cold Start e Média Bayesiana
+### 2.5 Cold Start e Média Bayesiana
 
 O problema do **início a frio** (*cold start*) ocorre pela falta de histórico para novos usuários ou itens. Para novos usuários, adota-se uma abordagem em duas etapas:
 
-1. **Recomendação por popularidade:** exibição inicial de itens bem avaliados (com suporte a filtros por tags).
-2. **Onboarding:** coleta de 5 a 10 avaliações iniciais para inicializar a filtragem colaborativa.
+1. **Recomendação por popularidade:** exibição de itens bem avaliados, com suporte a filtros por tags.
+2. **Onboarding:** coleta de avaliações iniciais (3 receitas obrigatórias) para inicializar a filtragem colaborativa.
 
 Para mitigar distorções de itens com poucas avaliações no ranking por popularidade, utiliza-se a **Média Bayesiana**:
 
-$$
-\text{score}(i) = \left( \frac{v}{v + m} \right) \cdot R_i + \left( \frac{m}{v + m} \right) \cdot C
-$$
+$$\text{score}(i) = \left( \frac{v}{v + m} \right) \cdot R_i + \left( \frac{m}{v + m} \right) \cdot C$$
 
 onde $v$ é o número de avaliações do item $i$, $R_i$ sua nota média simples, $C$ a média global e $m$ a constante de suavização.
 
-### 2.5 Métricas de Avaliação
+### 2.6 Métricas de Avaliação
 
-O desempenho dos modelos é avaliado por três dimensões.
+A avaliação com usuários utiliza duas métricas de ranking sobre uma lista de $K$ receitas recomendadas, cujas receitas cada usuário marca como relevantes ou não:
 
-**Acurácia de predição**, sendo $T$ o conjunto de teste:
+* **Precision@K:** fração das receitas recomendadas que o usuário considerou relevantes.
 
-$$
-\text{MAE} = \frac{1}{|T|} \sum_{(u,i) \in T} \left| R_{u,i} - \hat{R}_{u,i} \right|
-$$
+$$\text{Precision@}K = \frac{|\text{relevantes} \cap \text{recomendadas}|}{K}$$
 
-$$
-\text{RMSE} = \sqrt{\frac{1}{|T|} \sum_{(u,i) \in T} \left( R_{u,i} - \hat{R}_{u,i} \right)^2}
-$$
+* **Hit rate@K:** fração dos usuários para os quais pelo menos uma receita da lista foi considerada relevante.
 
-**Ranking Top-$K$:** Precision@K, Recall@K, MAP@K e NDCG@K.
+$$\text{Hit rate@}K = \frac{|\{u : \text{ao menos uma receita relevante na lista de } u\}|}{|U|}$$
 
-**Diversidade:** Cobertura do Catálogo, isto é, a proporção de itens do acervo recomendados a pelo menos um usuário.
+O *recall* e o F1 exigem conhecer o total de receitas relevantes de cada usuário no catálogo, informação que não está disponível: o usuário só julga as receitas que lhe são mostradas. Por isso essas métricas não foram calculadas (ver Seção 6).
 
 ---
 
 ## 3. Dados
 
-O projeto utiliza o dataset público do **Food.com** (Majumder et al., 2019), composto por dois arquivos CSV brutos (~644 MB no total).
+O projeto utiliza o dataset público do **Food.com**, composto por dois arquivos CSV brutos (~644 MB no total).
 
 ### 3.1 Detalhamento dos Arquivos do Dataset
 
-#### 1. `RAW_interactions.csv` (Tamanho: ~349,44 MB)
+#### 1. `RAW_interactions.csv` (~349,44 MB)
 
 Armazena o histórico de interações e avaliações dos usuários.
 
@@ -120,11 +97,11 @@ Armazena o histórico de interações e avaliações dos usuários.
 |---|---|---|
 | `user_id` | Inteiro / ID | Identificador único do usuário. |
 | `recipe_id` | Inteiro / ID | Identificador único da receita. |
-| `date` | Data (`YYYY-MM-DD`) | Data do registro da interação. |
-| `rating` | Inteiro (Escala 0–5) | Nota atribuída pelo usuário (**feedback explícito** utilizado na matriz $R$). |
-| `review` | Texto (*String*) | Comentário/crítica textual sobre a receita. |
+| `date` | Data (`YYYY-MM-DD`) | Data do registro da interação (define a receita mais recente do usuário). |
+| `rating` | Inteiro (escala 0–5) | Nota atribuída pelo usuário (**feedback explícito** utilizado na matriz $R$). |
+| `review` | Texto (*String*) | Comentário textual sobre a receita. |
 
-#### 2. `RAW_recipes.csv` (Tamanho: ~294,52 MB)
+#### 2. `RAW_recipes.csv` (~294,52 MB)
 
 Contém os metadados e detalhes de preparo de cada receita.
 
@@ -135,7 +112,7 @@ Contém os metadados e detalhes de preparo de cada receita.
 | `minutes` | Inteiro | Tempo estimado de preparo (em minutos). |
 | `contributor_id` | Inteiro / ID | Identificador do usuário autor da receita. |
 | `submitted` | Data (`YYYY-MM-DD`) | Data de publicação da receita. |
-| `tags` | Lista de *Strings* | Categorias e tags (utilizadas nos filtros de *cold start*). |
+| `tags` | Lista de *Strings* | Categorias e tags (usadas nos filtros da interface). |
 | `nutrition` | Lista numérica | Informações nutricionais em % do valor diário (PDV). |
 | `n_steps` | Inteiro | Número de passos do modo de preparo. |
 | `steps` | Lista de *Strings* | Instruções detalhadas de preparo. |
@@ -147,66 +124,73 @@ Contém os metadados e detalhes de preparo de cada receita.
 
 ### 4.1 Pré-processamento
 
-As bases `RAW_interactions.csv` e `RAW_recipes.csv` foram carregadas e limpas: remoção de linhas sem `user_id`, `recipe_id`, `rating`, `id` ou `name`; remoção de duplicatas (par usuário-receita e id de receita); preenchimento de descrições vazias; e descarte de interações cujas receitas não constam no catálogo. As colunas `tags`, `steps`, `ingredients` e `nutrition`, armazenadas como texto `"[...]"`, foram convertidas em listas Python.
+As bases `RAW_interactions.csv` e `RAW_recipes.csv` foram carregadas e limpas: remoção de linhas sem `user_id`, `recipe_id`, `rating`, `id` ou `name`; remoção de duplicatas (par usuário-receita e id de receita); preenchimento de descrições vazias; e descarte de interações cujas receitas não constam no catálogo. As colunas `tags`, `steps`, `ingredients` e `nutrition`, armazenadas como texto "[...]", foram convertidas em listas Python.
 
 ### 4.2 Modelos
 
-**Popularidade (baseline).** As receitas são ranqueadas pela Média Bayesiana (Seção 2.4), com $m = 5$, o que evita que receitas com poucas notas altas dominem o ranking.
+**Popularidade (baseline).** As receitas são ranqueadas pela Média Bayesiana (Seção 2.5), com $m = 5$, o que evita que receitas com poucas notas altas dominem o ranking.
 
-**"TD-IDF" (*content-based filtering*).** Cada receita é representada por um vetor TF-IDF (5.000 atributos, *stop words* em inglês) construído a partir do texto de seus ingredientes e tags. A similaridade entre receitas é o cosseno desses vetores. Para um usuário, as sementes são as 3 receitas mais recentes que ele avaliou com nota $\geq 4$; na interface é buscada a última avaliação. Cada candidato recebe como pontuação a maior similaridade com qualquer semente, e as receitas já avaliadas são excluídas.
+**Filtragem colaborativa user-based.** Para cada usuário, calcula-se o cosseno (Seção 2.2) com todos os usuários que avaliaram ao menos uma receita em comum, usando um índice invertido (receita → usuários) para não comparar usuários sem nada em comum. Parâmetros: $k = 50$ vizinhos, mínimo de 2 receitas em comum e mínimo de 2 vizinhos por receita candidata. A nota prevista é a média ponderada da Seção 2.3; receitas já avaliadas são excluídas. O ranking completo de cada usuário é guardado em cache e invalidado quando o usuário envia uma nova avaliação.
 
-**SVD (*collaborative filtering*).** Usa a implementação da biblioteca Surprise, com $k = 50$ fatores latentes, escala de notas 0–5 e semente fixa. O treino é feito por gradiente descendente sobre as avaliações observadas. Foram executadas validação cruzada de 3 partições e avaliação *holdout* de 20%. No momento da recomendação, a nota prevista $\hat{R}_{u,i} = \mu + b_u + b_i + p_u \cdot q_i^T$ é calculada de forma vetorizada (NumPy) para todo o catálogo e as $K$ maiores são retornadas. O modelo treinado é salvo em disco (`svd.pkl`) e reutilizado nas execuções seguintes.
+**Filtragem colaborativa item-based.** Os vizinhos de cada receita (até 50) são calculados sob demanda e mantidos em cache, usando o cosseno entre receitas (Seção 2.4) com mínimo de 3 usuários em comum. A semente é a receita mais recente do usuário com nota $\geq 4$, e as receitas já avaliadas são excluídas da lista.
+
+Nos dois modelos personalizados, quando o ranking tem menos receitas que o solicitado (poucos vizinhos ou filtro de tags restritivo), a lista é completada com as receitas mais populares que atendam ao mesmo filtro. Novas avaliações enviadas pela interface atualizam imediatamente as estruturas dos dois modelos, sem necessidade de novo treinamento.
 
 ### 4.3 Cold start e onboarding
 
-Usuários sem histórico, ou sem nota alta (no caso do kNN), recebem o ranking de popularidade como alternativa. Na criação de conta, o sistema apresenta receitas populares e variadas (com diversificação por tags) para o usuário avaliar, gerando os primeiros dados para os modelos personalizados. Todas as listas aceitam filtro por tags (a receita precisa ter todas as selecionadas).
+Usuários sem histórico, ou sem nenhuma nota alta (no caso do *item-based*), recebem o ranking de popularidade. Na criação de conta, o sistema apresenta receitas populares e variadas (com diversificação por tags) e exige a avaliação de 3 receitas antes de liberar as recomendações personalizadas. Todas as listas aceitam filtro por tags (a receita precisa ter todas as selecionadas).
 
 ### 4.4 Arquitetura
 
-O back-end é uma API FastAPI que carrega os dados e os modelos na inicialização e mantém o estado em memória. Usuários e novas avaliações são persistidos em SQLite; ao iniciar, as notas do app substituem as do dataset para o mesmo par usuário-receita. Os endpoints cobrem usuários, onboarding, recomendações (por modelo, com filtro de tags), histórico, detalhe de receita e envio de avaliações.
+O back-end é uma API FastAPI que carrega os dados e os modelos na inicialização e mantém o estado em memória. Usuários e novas avaliações são persistidos em SQLite; ao iniciar, as notas registradas no aplicativo substituem as do dataset para o mesmo par usuário-receita. Os endpoints cobrem usuários, onboarding, recomendações (por modelo, com filtro de tags), histórico, detalhe de receita e envio de avaliações. A interface web consome essa API.
+
+### 4.5 Protocolo de avaliação com usuários
+
+A avaliação foi feita presencialmente com 10 usuários, em duas etapas:
+
+1. **Treino do sistema de avaliação.** O usuário avaliou com 5 estrelas as 3 receitas obrigatórias do onboarding, mais uma receita da recomendação personalizada seguinte que considerou interessante ou que gostaria de experimentar. Isso fornece ao sistema o histórico mínimo e uma semente para o *item-based*.
+2. **Avaliação das recomendações.** Das dez receitas seguintes recomendadas, o usuário apontou quais eram relevantes (interessantes) para ele e quais não eram.
+
+Para cada abordagem, calcularam-se a *precision@10* e o *hit rate@10* (Seção 2.6). Após o teste, os usuários puderam registrar comentários livres.
 
 ---
 
 ## 5. Resultados
 
-A Tabela 1 apresenta o erro de predição do modelo SVD ($k = 50$) na validação cruzada de 3 partições, com notas na escala de 0 a 5.
+| Abordagem | Precision@10 | Hit rate@10 |
+|---|---|---|
+| User-based | 44% | 90% (9 de 10 usuários) |
+| Item-based | 49% | 100% (10 de 10 usuários) |
 
-**Tabela 1 – Acurácia de predição do SVD (validação cruzada, 3 partições)**
+Em média, o *user-based* teve 4,4 receitas relevantes entre as 10 recomendadas, e o *item-based*, 4,9. O *user-based* não encontrou nenhuma receita relevante para um dos usuários, enquanto o *item-based* encontrou ao menos uma para todos.
 
-| Métrica | Fold 1 | Fold 2 | Fold 3 | Média | Desvio-padrão |
-|---|---|---|---|---|---|
-| RMSE | 1,2212 | 1,2173 | 1,2208 | 1,2198 | 0,0017 |
-| MAE | 0,7406 | 0,7377 | 0,7386 | 0,7390 | 0,0012 |
+**Comentários dos usuários.** Dois comentários se destacaram na abordagem *user-based*:
 
-**Estabilidade.** O desvio-padrão corresponde a cerca de 0,14% da média no RMSE e 0,16% no MAE, e a diferença entre a melhor e a pior partição é de apenas 0,0039 (RMSE) e 0,0029 (MAE). Isso indica que o desempenho não depende de uma divisão específica dos dados.
+* "Não conseguiu reconhecer que eu sou vegetariana, continuava mandando receitas saudáveis só que com carne."
+* "Muitos bolos estavam sendo recomendados sendo que eu nem gosto de bolo."
 
-**Magnitude do erro.** Em média, a previsão erra 0,74 ponto, o que equivale a aproximadamente 14,8% da amplitude da escala (0 a 5).
+**Discussão.** A diferença entre as abordagens é pequena: 5 pontos percentuais de precision e um usuário de diferença no hit rate. Com apenas 10 usuários, ela não permite afirmar que uma abordagem seja melhor que a outra. Uma hipótese para o resultado ligeiramente superior do *item-based* é que ele parte de uma receita concreta que o usuário já marcou como interessante, enquanto o *user-based* depende de vizinhos formados a partir de poucas avaliações em comum.
 
-**Distribuição dos erros.** A razão RMSE/MAE é de aproximadamente 1,65. Como o RMSE penaliza erros ao quadrado, esse valor sugere que a maior parte das previsões fica próxima da nota real, enquanto um pequeno número de erros grandes eleva o RMSE. Esse comportamento é esperado em dados em que as notas se concentram nos valores altos e há avaliações isoladas com nota baixa.
+Os comentários mostram uma limitação estrutural da filtragem colaborativa pura: os modelos só enxergam as notas, e não os ingredientes ou o tipo de prato. Restrições alimentares (como o vegetarianismo) e preferências por categorias só são respeitadas quando o usuário seleciona as tags correspondentes. A predominância de bolos pode refletir a popularidade desse tipo de receita entre os vizinhos, mas essa explicação também não foi verificada.
 
 ---
 
 ## 6. Limitações
 
-O modelo SVD é treinado offline e seus parâmetros ficam congelados depois disso. Novas avaliações inseridas pela aplicação atualizam o histórico do usuário (usado para excluir itens já vistos e escolher sementes do kNN), mas não alteram os vetores latentes $p_u$, $q_i$ nem os vieses. Assim, usuários criados depois do treino não possuem vetor latente e recebem recomendações por popularidade, e usuários existentes só têm suas novas notas refletidas no SVD após um novo treinamento. É possível observar que uma abordagem *content-based filtering* trata melhor usuários novatos.
+* **Poucos usuários.** O teste teve apenas 10 participantes. Cada usuário representa 10 pontos percentuais no hit rate, e as diferenças observadas entre os modelos estão dentro da variação esperada para uma amostra desse tamanho.
+* **Fadiga do processo.** A avaliação exigiu julgar muitas receitas, e vários participantes precisaram pesquisar a tradução dos nomes, já que as receitas do Food.com estão em inglês. Isso pode ter reduzido a atenção nas últimas respostas e influenciado o julgamento de relevância.
+* **Pouco histórico por usuário.** Cada participante forneceu apenas 4 avaliações antes do teste, e os parâmetros mínimos de itens e usuários em comum limitam o número de vizinhos disponíveis. Não houve ajuste fino dos hiperparâmetros ($k$, mínimos de itens e usuários em comum) por falta de tempo, então os modelos podem não estar bem sintonizados.
+* **Viés de seleção da semente.** A quarta avaliação do treino foi escolhida entre as recomendações personalizadas. Dependendo de qual modelo gerou essa lista, a semente do *item-based* pode ter sido influenciada pelo próprio sistema.
+* **Ausência de baseline na comparação.** O ranking por popularidade não foi avaliado com os mesmos usuários, então não é possível afirmar quanto os modelos personalizados superam a recomendação não personalizada.
+* **Métricas incompletas.** *Recall* e F1 não foram calculados porque o total de receitas relevantes por usuário é desconhecido. Calculá-los exigiria um conjunto comum de receitas (*pooling*) julgado por cada usuário.
+* **Filtragem colaborativa pura.** Os modelos não usam ingredientes, tags nem texto das receitas, o que explica a dificuldade com restrições alimentares e preferências por categoria, apontadas nos comentários.
+* **Desempenho.** O cálculo de similaridades é feito em tempo de requisição, em Python, e os resultados ficam em cache por usuário. A primeira recomendação de um usuário, ou de uma receita-semente nova, é mais lenta que as seguintes.
 
 ---
 
 ## 7. Conclusão
 
-Este trabalho construiu e avaliou um sistema de recomendação de receitas a partir do histórico de interações do Food.com, combinando três abordagens: um baseline por popularidade (Média Bayesiana), um modelo *content-based* com vetores TF-IDF de ingredientes e tags, e filtragem colaborativa por fatoração de matrizes (SVD). O sistema foi disponibilizado por meio de uma API FastAPI com persistência em SQLite, permitindo navegar pelas receitas, consultar o histórico, obter recomendações e registrar novas avaliações.
+Este trabalho implementou um sistema de recomendação de receitas com filtragem colaborativa baseada em vizinhança, nas versões *user-based* e *item-based*, mais um baseline por popularidade e um tratamento de *cold start* por onboarding. No teste com 10 usuários, o *user-based* obteve precision@10 de 44% e hit rate de 90%, e o *item-based*, 49% e 100%. Ambos encontraram receitas relevantes para quase todos os participantes, mas a diferença entre eles é pequena demais para ser conclusiva.
 
-Na validação cruzada de 3 partições, o SVD obteve RMSE de 1,2198 ± 0,0017 e MAE de 0,7390 ± 0,0012. A variação mínima entre as partições indica que o modelo é estável, e o erro médio de cerca de 0,74 ponto representa aproximadamente 15% da escala de notas. A diferença entre RMSE e MAE aponta que o erro se concentra em poucos casos extremos, o que é coerente com a concentração das notas nos valores mais altos.
+Os comentários dos usuários indicam o principal ponto de melhoria: a falta de informação de conteúdo impede que os modelos respeitem restrições alimentares e preferências por tipo de prato. Como trabalhos futuros, propõem-se (i) uma abordagem híbrida que combine a filtragem colaborativa com atributos das receitas (ingredientes e tags), (ii) a avaliação com mais usuários e com o baseline de popularidade, (iii) o cálculo de *recall* e F1 por meio de *pooling* e (iv) o ajuste dos hiperparâmetros com uma avaliação offline complementar.
 
-O problema do início a frio foi tratado em duas etapas: ranking por popularidade com filtro por tags e *onboarding* com receitas populares e diversificadas, o que gera os primeiros dados de cada usuário. Nesse cenário, o modelo *content-based* mostrou-se mais adequado a usuários novatos, pois depende apenas das receitas que eles já avaliaram bem, sem exigir novo treinamento.
-
-A principal limitação é que o SVD é treinado offline. Novas avaliações inseridas pela aplicação atualizam o histórico do usuário, mas não os vetores latentes nem os vieses, e usuários criados após o treino recebem recomendações por popularidade até que o modelo seja retreinado.
-
----
-
-### Referências Bibliográficas
-
-* KOREN, Y.; BELL, R.; VOLINSKY, C. Matrix factorization techniques for recommender systems. *IEEE Computer*, v. 42, n. 8, p. 30-37, 2009.
-* MAJUMDER, B. P. et al. Generating personalized recipe from historical user preferences. In: *Proceedings of the 2019 Conference on Empirical Methods in Natural Language Processing (EMNLP-IJCNLP)*, 2019.
-* RICCI, F.; ROKACH, L.; SHAPIRA, B.; KANTOR, P. B. (Eds.). *Recommender Systems Handbook*. New York: Springer, 2011.
-* SARWAR, B. et al. Item-based collaborative filtering recommendation algorithms. In: *Proceedings of the 10th international conference on World Wide Web (WWW)*, 2001. p. 285-295.
